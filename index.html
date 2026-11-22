@@ -6,12 +6,15 @@
 body{font-family:sans-serif;background:#0f3d2e;color:#fff;text-align:center;margin:0;padding:10px}
 .d{background:#1b5e45;border-radius:14px;margin:10px 0;padding:12px}
 .n{font-size:26px}.c{font-size:22px;margin:6px}
-button,select{font-size:20px;border:none;border-radius:10px;padding:14px;margin:4px}
+button,select,input{font-size:18px;border:none;border-radius:10px;padding:12px;margin:4px}
+input{width:85%}
 .tap{width:100%;font-size:28px;padding:30px;background:#f2c94c}
 .done{opacity:.5}
 #vbtn{background:#4caf50;color:#fff;width:100%}
 #vbtn.on{background:#c0392b}
 #heard{min-height:24px;font-size:16px;opacity:.8}
+.del{background:#7a2b2b;color:#fff}
+.empty{opacity:.8;padding:20px}
 </style></head><body>
 <h2>Tasbih Counter</h2>
 <div class="d">
@@ -20,29 +23,61 @@ button,select{font-size:20px;border:none;border-radius:10px;padding:14px;margin:
  <div id="heard"></div>
 </div>
 <div id="app"></div>
+<div class="d">
+ <div class="n">Add Dhikr</div>
+ <input id="nn" placeholder="Name, e.g. SubhanAllah">
+ <input id="ng" type="number" placeholder="Target, e.g. 1000">
+ <input id="nk" placeholder="Voice words (optional), comma separated">
+ <button onclick="addDhikr()">Add</button>
+</div>
 <script>
-const GOAL=200000;
-const names=["SubhanAllah","Alhamdulillah","Allahu Akbar","Astaghfirullah"];
-const pats=[/subhan|سبحان/g,/hamd|حمد/g,/akbar|اكبر|أكبر/g,/staghfir|استغفر/g];
-let c=JSON.parse(localStorage.getItem("tasbih")||"[0,0,0,0]");
-function save(){localStorage.setItem("tasbih",JSON.stringify(c))}
-function add(i,n){c[i]=Math.min(GOAL,c[i]+n);save();draw()}
-function tap(i){if(c[i]<GOAL){add(i,1);if(navigator.vibrate)navigator.vibrate(15)}}
-function undo(i){if(c[i]>0){c[i]--;save();draw()}}
+const KNOWN=[
+ [/subhan/i,"subhan,سبحان"],[/hamd/i,"hamd,حمد"],[/akbar/i,"akbar,اكبر,أكبر"],
+ [/staghfir/i,"staghfir,استغفر"],[/ilaha/i,"ilaha,illallah,اله,إله"],
+ [/salli|salawat|durood/i,"salli,صل"],[/hawla|quwwata/i,"hawla,quwwata,حول,قوة"]];
+let list=JSON.parse(localStorage.getItem("tasbih2")||"null");
+if(!list){
+ const old=localStorage.getItem("tasbih");
+ if(old){const o=JSON.parse(old);list=[
+  {name:"SubhanAllah",goal:200000,count:o[0],keys:"subhan,سبحان"},
+  {name:"Alhamdulillah",goal:200000,count:o[1],keys:"hamd,حمد"},
+  {name:"Allahu Akbar",goal:200000,count:o[2],keys:"akbar,اكبر,أكبر"},
+  {name:"Astaghfirullah",goal:200000,count:o[3],keys:"staghfir,استغفر"}];}
+ else list=[];
+ save();
+}
+function save(){localStorage.setItem("tasbih2",JSON.stringify(list))}
+function esc(s){return s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}
+function pat(k){const w=k.split(",").map(x=>x.trim().toLowerCase().replace(/\s+/g,"")).filter(Boolean);
+ return w.length?new RegExp(w.map(esc).join("|"),"g"):null}
+function add(i,n){const d=list[i];d.count=Math.min(d.goal,d.count+n);save();draw()}
+function tap(i){if(list[i].count<list[i].goal){add(i,1);if(navigator.vibrate)navigator.vibrate(15)}}
+function undo(i){if(list[i].count>0){list[i].count--;save();draw()}}
+function del(i){if(confirm("Delete "+list[i].name+" and its count?")){list.splice(i,1);save();draw()}}
+function addDhikr(){
+ const n=document.getElementById("nn").value.trim(),g=parseInt(document.getElementById("ng").value);
+ let k=document.getElementById("nk").value.trim();
+ if(!n||!g||g<1){alert("Please enter a name and a target");return}
+ if(!k){const f=KNOWN.find(x=>x[0].test(n));k=f?f[1]:n}
+ list.push({name:n,goal:g,count:0,keys:k});save();draw();
+ ["nn","ng","nk"].forEach(id=>document.getElementById(id).value="");
+}
 function draw(){
- document.getElementById("app").innerHTML=names.map((n,i)=>`
- <div class="d ${c[i]>=GOAL?'done':''}">
-  <div class="n">${n}</div>
-  <div class="c">${c[i].toLocaleString()} / ${GOAL.toLocaleString()}</div>
-  <button class="tap" onclick="tap(${i})">${c[i]>=GOAL?'Complete ✓':'Tap'}</button>
+ document.getElementById("app").innerHTML=list.length?list.map((d,i)=>`
+ <div class="d ${d.count>=d.goal?'done':''}">
+  <div class="n">${d.name}</div>
+  <div class="c">${d.count.toLocaleString()} / ${d.goal.toLocaleString()}</div>
+  <button class="tap" onclick="tap(${i})">${d.count>=d.goal?'Complete ✓':'Tap'}</button>
   <button onclick="undo(${i})">Undo</button>
- </div>`).join("")}
+  <button class="del" onclick="del(${i})">Delete</button>
+ </div>`).join(""):'<div class="empty">No dhikr yet. Add one below.</div>'}
 
 let rec,on=false,lock=null;
 function heard(t){
  t=t.toLowerCase().replace(/\s+/g,"");
  let msg=[];
- pats.forEach((p,i)=>{const m=(t.match(p)||[]).length;if(m&&c[i]<GOAL){add(i,m);msg.push(names[i]+" +"+m)}});
+ list.forEach((d,i)=>{const p=pat(d.keys||"");if(!p)return;
+  const m=(t.match(p)||[]).length;if(m&&d.count<d.goal){add(i,m);msg.push(d.name+" +"+m)}});
  document.getElementById("heard").textContent=msg.length?msg.join(", "):"(not recognised)";
 }
 async function toggleVoice(){
