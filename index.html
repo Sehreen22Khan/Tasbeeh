@@ -1,100 +1,645 @@
 <!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Tasbih</title>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Tasbeeh">
+<meta name="theme-color" content="#0f5132">
+<title>Tasbeeh</title>
 <style>
-body{font-family:sans-serif;background:#0f3d2e;color:#fff;text-align:center;margin:0;padding:10px}
-.d{background:#1b5e45;border-radius:14px;margin:10px 0;padding:12px}
-.n{font-size:26px}.c{font-size:22px;margin:6px}
-button,select,input{font-size:18px;border:none;border-radius:10px;padding:12px;margin:4px}
-input{width:85%}
-.tap{width:100%;font-size:28px;padding:30px;background:#f2c94c}
-.done{opacity:.5}
-#vbtn{background:#4caf50;color:#fff;width:100%}
-#vbtn.on{background:#c0392b}
-#heard{min-height:24px;font-size:16px;opacity:.8}
-.del{background:#7a2b2b;color:#fff}
-.empty{opacity:.8;padding:20px}
-</style></head><body>
-<h2>Tasbih Counter</h2>
-<div class="d">
- <select id="lang"><option value="ar-SA">Arabic</option><option value="en-US">English</option></select>
- <button id="vbtn" onclick="toggleVoice()">🎤 Start Voice Counting</button>
- <div id="heard"></div>
-</div>
-<div id="app"></div>
-<div class="d">
- <div class="n">Add Dhikr</div>
- <input id="nn" placeholder="Name, e.g. SubhanAllah">
- <input id="ng" type="number" placeholder="Target, e.g. 1000">
- <input id="nk" placeholder="Voice words (optional), comma separated">
- <button onclick="addDhikr()">Add</button>
-</div>
-<script>
-const KNOWN=[
- [/subhan/i,"subhan,سبحان"],[/hamd/i,"hamd,حمد"],[/akbar/i,"akbar,اكبر,أكبر"],
- [/staghfir/i,"staghfir,استغفر"],[/ilaha/i,"ilaha,illallah,اله,إله"],
- [/salli|salawat|durood/i,"salli,صل"],[/hawla|quwwata/i,"hawla,quwwata,حول,قوة"]];
-let list=JSON.parse(localStorage.getItem("tasbih2")||"null");
-if(!list){
- const old=localStorage.getItem("tasbih");
- if(old){const o=JSON.parse(old);list=[
-  {name:"SubhanAllah",goal:200000,count:o[0],keys:"subhan,سبحان"},
-  {name:"Alhamdulillah",goal:200000,count:o[1],keys:"hamd,حمد"},
-  {name:"Allahu Akbar",goal:200000,count:o[2],keys:"akbar,اكبر,أكبر"},
-  {name:"Astaghfirullah",goal:200000,count:o[3],keys:"staghfir,استغفر"}];}
- else list=[];
- save();
-}
-function save(){localStorage.setItem("tasbih2",JSON.stringify(list))}
-function esc(s){return s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}
-function pat(k){const w=k.split(",").map(x=>x.trim().toLowerCase().replace(/\s+/g,"")).filter(Boolean);
- return w.length?new RegExp(w.map(esc).join("|"),"g"):null}
-function add(i,n){const d=list[i];d.count=Math.min(d.goal,d.count+n);save();draw()}
-function tap(i){if(list[i].count<list[i].goal){add(i,1);if(navigator.vibrate)navigator.vibrate(15)}}
-function undo(i){if(list[i].count>0){list[i].count--;save();draw()}}
-function del(i){if(confirm("Delete "+list[i].name+" and its count?")){list.splice(i,1);save();draw()}}
-function addDhikr(){
- const n=document.getElementById("nn").value.trim(),g=parseInt(document.getElementById("ng").value);
- let k=document.getElementById("nk").value.trim();
- if(!n||!g||g<1){alert("Please enter a name and a target");return}
- if(!k){const f=KNOWN.find(x=>x[0].test(n));k=f?f[1]:n}
- list.push({name:n,goal:g,count:0,keys:k});save();draw();
- ["nn","ng","nk"].forEach(id=>document.getElementById(id).value="");
-}
-function draw(){
- document.getElementById("app").innerHTML=list.length?list.map((d,i)=>`
- <div class="d ${d.count>=d.goal?'done':''}">
-  <div class="n">${d.name}</div>
-  <div class="c">${d.count.toLocaleString()} / ${d.goal.toLocaleString()}</div>
-  <button class="tap" onclick="tap(${i})">${d.count>=d.goal?'Complete ✓':'Tap'}</button>
-  <button onclick="undo(${i})">Undo</button>
-  <button class="del" onclick="del(${i})">Delete</button>
- </div>`).join(""):'<div class="empty">No dhikr yet. Add one below.</div>'}
+:root{--green:#0f5132;--green2:#198754;--bg:#f4f1ea;--card:#fff;--text:#1f2a24;--muted:#6b7a71;--red:#b02a37}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);padding-bottom:calc(env(safe-area-inset-bottom) + 40px)}
+header{background:var(--green);color:#fff;padding:calc(env(safe-area-inset-top) + 16px) 16px 14px;text-align:center}
+header h1{margin:0;font-size:22px}
+header p{margin:4px 0 0;font-size:13px;opacity:.85}
+main{max-width:560px;margin:0 auto;padding:12px}
+h3{margin:18px 0 6px;font-size:16px}
+.panel{background:var(--card);border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.tap{display:block;width:100%;border:0;text-align:left;background:var(--card);border-radius:16px;padding:16px;margin:0 0 12px;box-shadow:0 1px 3px rgba(0,0,0,.1);font:inherit;color:inherit;touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;min-height:130px}
+.tap:active{transform:scale(.985);background:#eef7f1}
+.tap .name{font-size:18px;font-weight:600}
+.tap .count{font-size:44px;font-weight:700;color:var(--green);font-variant-numeric:tabular-nums;margin:4px 0}
+.tap .of{font-size:13px;color:var(--muted)}
+.bar{height:8px;background:#e6e1d6;border-radius:4px;margin-top:10px;overflow:hidden}
+.bar span{display:block;height:100%;background:var(--green2)}
+.tap.done{background:#e8f5ec}
+.tap.done .count{color:var(--green2)}
+.flash{animation:flash .35s}
+@keyframes flash{from{background:#cdeed8}to{background:var(--card)}}
+.btn{border:0;border-radius:10px;padding:12px 14px;font:inherit;font-weight:600;background:var(--green);color:#fff;touch-action:manipulation}
+.btn.secondary{background:#e9e4d8;color:var(--text)}
+.btn.danger{background:var(--red)}
+.btn.listening{background:var(--red)}
+.btn:disabled{opacity:.4}
+.row{display:flex;gap:8px;align-items:center}
+label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+input,select{width:100%;padding:11px;border:1px solid #d6d0c2;border-radius:10px;font:inherit;font-size:16px;background:#fff;color:var(--text)}
+.hold{position:relative;overflow:hidden;width:100%;background:#e9e4d8;color:var(--text);touch-action:none;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
+.hold .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(176,42,55,.3)}
+.hold .lbl{position:relative}
+.item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid #eee;gap:8px}
+.item .btn{padding:9px 12px}
+.small{font-size:13px;color:var(--muted)}
+.empty{text-align:center;color:var(--muted);padding:24px 8px}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:16px;z-index:10}
+.overlay.show{display:flex}
+.modal{background:#fff;border-radius:16px;padding:18px;width:100%;max-width:420px;max-height:90vh;overflow:auto}
+.modal h3{margin-top:0}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:20px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20;max-width:90%;text-align:center}
+#toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <h1>Tasbeeh</h1>
+  <p>Tap a card to count · saved on this phone</p>
+</header>
 
-let rec,on=false,lock=null;
-function heard(t){
- t=t.toLowerCase().replace(/\s+/g,"");
- let msg=[];
- list.forEach((d,i)=>{const p=pat(d.keys||"");if(!p)return;
-  const m=(t.match(p)||[]).length;if(m&&d.count<d.goal){add(i,m);msg.push(d.name+" +"+m)}});
- document.getElementById("heard").textContent=msg.length?msg.join(", "):"(not recognised)";
-}
-async function toggleVoice(){
- const b=document.getElementById("vbtn");
- if(on){on=false;rec&&rec.stop();if(lock){lock.release();lock=null}
-  b.classList.remove("on");b.textContent="🎤 Start Voice Counting";return}
- const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
- if(!SR){alert("Voice recognition isn't supported here. Try opening in Safari.");return}
- rec=new SR();rec.lang=document.getElementById("lang").value;
- rec.continuous=true;rec.interimResults=false;
- rec.onresult=e=>{for(let r=e.resultIndex;r<e.results.length;r++)
-  if(e.results[r].isFinal)heard(e.results[r][0].transcript)};
- rec.onend=()=>{if(on)setTimeout(()=>{try{rec.start()}catch(x){}},300)};
- rec.onerror=e=>{document.getElementById("heard").textContent="Mic: "+e.error};
- try{rec.start()}catch(x){}
- on=true;b.classList.add("on");b.textContent="⏹ Stop Voice Counting";
- try{lock=await navigator.wakeLock.request("screen")}catch(x){}
-}
-draw();
-</script></body></html>
+<main>
+  <div id="list"></div>
+
+  <div class="panel">
+    <div class="row">
+      <strong style="flex:1">🎙️ Voice counting</strong>
+      <select id="lang" style="width:auto">
+        <option value="ar-SA">Arabic</option>
+        <option value="en-US">English</option>
+      </select>
+    </div>
+    <button class="btn" id="voiceBtn" style="width:100%;margin-top:10px">🎙️ Start voice counting</button>
+    <div class="small" id="voiceStatus" style="margin-top:8px">Keep this app open on screen while it listens.</div>
+    <div class="small" id="heard" style="margin-top:4px"></div>
+  </div>
+
+  <div class="panel">
+    <div class="small" id="lastAction">Nothing to undo yet.</div>
+    <button class="btn hold" id="undoBtn" style="margin-top:8px"><span class="fill"></span><span class="lbl">Press and hold to undo</span></button>
+  </div>
+
+  <button class="btn secondary" id="manageBtn" style="width:100%">⚙️ Manage dhikr (add, edit, delete)</button>
+
+  <div class="panel" id="managePanel" hidden style="margin-top:12px">
+    <h3 style="margin-top:0">Add a dhikr</h3>
+    <label for="newName">Name</label>
+    <input id="newName" placeholder="e.g. SubhanAllah" autocomplete="off">
+    <label for="newTarget">Target</label>
+    <input id="newTarget" type="text" inputmode="numeric" placeholder="e.g. 200000" autocomplete="off">
+    <label for="newWords">Voice words (optional, separated by commas)</label>
+    <input id="newWords" placeholder="Filled in automatically for common adhkar" autocomplete="off">
+    <button class="btn" id="addBtn" style="width:100%;margin-top:12px">Add dhikr</button>
+
+    <h3>Your dhikr</h3>
+    <div id="manageList"></div>
+
+    <div id="deletedWrap">
+      <h3>Recently deleted</h3>
+      <div class="small">Deleted dhikr keep their counts here and can be restored.</div>
+      <div id="deletedList"></div>
+    </div>
+  </div>
+</main>
+
+<div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
+<div id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var KEY = 'tasbeeh-data-v4';
+  var DEFAULT_TARGET = 200000;
+
+  // Common adhkar: "match" finds them by name, "words" are what voice mode listens for.
+  // More specific phrases come first so they win over shorter ones.
+  var KNOWN = [
+    { name: 'SubhanAllahi wa bihamdihi', match: ['bihamdihi', 'وبحمده'],
+      words: ['subhanallahi wa bihamdihi', 'subhanallah wa bihamdihi', 'bihamdihi', 'سبحان الله وبحمده', 'وبحمده'] },
+    { name: 'SubhanAllahil Azeem', match: ['azeem', 'azim', 'العظيم'],
+      words: ['subhanallahil azeem', 'subhanallah al azeem', 'azeem', 'azim', 'سبحان الله العظيم', 'العظيم'] },
+    { name: 'SubhanAllah', match: ['subhan', 'سبحان'],
+      words: ['subhanallah', 'subhan allah', 'subhan', 'سبحان الله', 'سبحان'] },
+    { name: 'Alhamdulillah', match: ['hamd', 'الحمد'],
+      words: ['alhamdulillah', 'al hamdulillah', 'hamdulillah', 'الحمد لله', 'الحمدلله', 'الحمد'] },
+    { name: 'Allahu Akbar', match: ['akbar', 'takbir', 'اكبر'],
+      words: ['allahu akbar', 'allah akbar', 'akbar', 'الله اكبر', 'اكبر'] },
+    { name: 'Astaghfirullah', match: ['astaghfir', 'istighfar', 'استغفر'],
+      words: ['astaghfirullah', 'astaghfir', 'استغفر الله', 'استغفر'] },
+    { name: 'La ilaha illallah', match: ['ilaha', 'illallah', 'tahlil', 'لااله'],
+      words: ['la ilaha illallah', 'ilaha', 'illallah', 'لا اله الا الله', 'لا اله', 'الا الله'] },
+    { name: 'Allahumma salli ala Muhammad', match: ['salli', 'salawat', 'durood', 'darood', 'اللهمصل'],
+      words: ['allahumma salli', 'salli ala', 'اللهم صل', 'صل على محمد'] },
+    { name: 'La hawla wa la quwwata illa billah', match: ['hawla', 'quwwata', 'حول'],
+      words: ['la hawla', 'hawla', 'quwwata', 'لا حول', 'حول ولا قوة'] },
+    { name: 'Hasbunallah', match: ['hasbunallah', 'hasbiyallah', 'حسبنا', 'حسبي'],
+      words: ['hasbunallah', 'hasbiyallah', 'حسبنا الله', 'حسبي الله'] }
+  ];
+
+  function $(id) { return document.getElementById(id); }
+  function fmt(n) { return Number(n).toLocaleString('en-US'); }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+  // Lowercase, strip Arabic vowel marks, unify letter forms, remove spaces and punctuation
+  function norm(s) {
+    return String(s || '').toLowerCase()
+      .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+      .replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه')
+      .replace(/[^\p{L}\p{N}]+/gu, '');
+  }
+
+  function suggest(name) {
+    var n = norm(name);
+    if (!n) return null;
+    for (var i = 0; i < KNOWN.length; i++) {
+      if (KNOWN[i].match.some(function (m) { return n.indexOf(norm(m)) !== -1; })) return KNOWN[i];
+    }
+    return null;
+  }
+
+  function parseWords(words) {
+    if (typeof words === 'string') words = words.split(',');
+    return Array.isArray(words) ? words.map(function (w) { return String(w).trim(); }).filter(Boolean) : [];
+  }
+
+  function makeItem(name, target, count, words) {
+    target = Math.max(1, Math.floor(Number(target) || DEFAULT_TARGET));
+    count = Math.min(target, Math.max(0, Math.floor(Number(count) || 0)));
+    words = parseWords(words);
+    if (!words.length) { var s = suggest(name); if (s) words = s.words.slice(); }
+    return { id: uid(), name: String(name).trim(), target: target, count: count, words: words };
+  }
+
+  // ---------- Loading, including counts saved by earlier versions ----------
+  function extract(v, depth) {
+    if (!v || depth > 3) return null;
+    if (Array.isArray(v)) {
+      var out = v.map(function (o) {
+        if (!o || typeof o !== 'object') return null;
+        var name = o.name || o.label || o.title || o.text || o.dhikr;
+        var c = o.count != null ? o.count : (o.value != null ? o.value : o.n);
+        if (!name || c == null || !isFinite(Number(c))) return null;
+        return makeItem(name, o.target || o.goal || o.max, c, o.words || o.keywords || o.voiceWords || o.voice);
+      }).filter(Boolean);
+      return out.length ? out : null;
+    }
+    if (typeof v === 'object') {
+      var mapped = [];
+      Object.keys(v).forEach(function (k) {
+        var val = v[k];
+        if (typeof val === 'number' && isFinite(val)) {
+          var s = suggest(k);
+          if (s) mapped.push(makeItem(s.name, DEFAULT_TARGET, val));
+        } else if (val && typeof val === 'object' && !Array.isArray(val) && val.count != null && isFinite(Number(val.count))) {
+          var nm = val.name || val.label || (suggest(k) || {}).name || k;
+          mapped.push(makeItem(nm, val.target || val.goal, val.count, val.words || val.keywords));
+        }
+      });
+      if (mapped.length) return mapped;
+      var keys = Object.keys(v).filter(function (k) { return !/delet|trash|bin|hist/i.test(k); });
+      keys.sort(function (a, b) { return (/item|dhikr|adhkar|list|data/i.test(b) ? 1 : 0) - (/item|dhikr|adhkar|list|data/i.test(a) ? 1 : 0); });
+      for (var i = 0; i < keys.length; i++) {
+        var r = extract(v[keys[i]], depth + 1);
+        if (r) return r;
+      }
+    }
+    return null;
+  }
+
+  function findOld() {
+    var best = null, bestTotal = -1, loose = [];
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (k === KEY) continue;
+      var v;
+      try { v = JSON.parse(localStorage.getItem(k)); } catch (e) { continue; }
+      if (typeof v === 'number' && isFinite(v)) {
+        var s = suggest(k);
+        if (s) loose.push(makeItem(s.name, DEFAULT_TARGET, v));
+        continue;
+      }
+      var items = extract(v, 0);
+      if (items) {
+        var total = items.reduce(function (a, x) { return a + x.count; }, 0);
+        if (total > bestTotal) { best = items; bestTotal = total; }
+      }
+    }
+    if (loose.length) {
+      var lt = loose.reduce(function (a, x) { return a + x.count; }, 0);
+      if (lt > bestTotal) best = loose;
+    }
+    return best;
+  }
+
+  var migrated = false;
+  function load() {
+    try {
+      var d = JSON.parse(localStorage.getItem(KEY));
+      if (d && Array.isArray(d.items)) {
+        d.deleted = Array.isArray(d.deleted) ? d.deleted : [];
+        d.lang = d.lang || 'ar-SA';
+        return d;
+      }
+    } catch (e) {}
+    var old = null;
+    try { old = findOld(); } catch (e) {}
+    if (old && old.length) migrated = true;
+    return { items: old || [], deleted: [], lang: 'ar-SA' };
+  }
+
+  var state = load();
+  var hist = []; // undo history for this session
+
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); }
+    catch (e) { toast('⚠️ Could not save on this phone'); }
+  }
+  save(); // old saved data is left untouched, this just writes the new format
+
+  if (navigator.storage && navigator.storage.persist) { try { navigator.storage.persist(); } catch (e) {} }
+
+  function find(id) { return state.items.find(function (x) { return x.id === id; }); }
+
+  // ---------- Toast and modal ----------
+  var toastTimer;
+  function toast(t) {
+    var el = $('toast');
+    el.textContent = t;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2600);
+  }
+  function openModal(html) { $('modal').innerHTML = html; $('overlay').classList.add('show'); }
+  function closeModal() { $('overlay').classList.remove('show'); $('modal').innerHTML = ''; }
+
+  // ---------- Rendering ----------
+  function render() {
+    var list = $('list');
+    if (!state.items.length) {
+      list.innerHTML = '<div class="panel empty">No dhikr yet.<br>Tap <b>Manage dhikr</b> below to add one.</div>';
+    } else {
+      list.innerHTML = state.items.map(function (it) {
+        var done = it.count >= it.target;
+        var pct = Math.min(100, it.count / it.target * 100).toFixed(2);
+        return '<button class="tap' + (done ? ' done' : '') + '" data-id="' + it.id + '">' +
+          '<div class="name">' + esc(it.name) + '</div>' +
+          '<div class="count">' + fmt(it.count) + '</div>' +
+          '<div class="of">' + (done ? '✓ Completed — MashaAllah' : 'of ' + fmt(it.target) + ' · ' + fmt(it.target - it.count) + ' left') + '</div>' +
+          '<div class="bar"><span style="width:' + pct + '%"></span></div></button>';
+      }).join('');
+    }
+    renderUndo();
+    renderManage();
+  }
+
+  function renderUndo() {
+    var h = hist[hist.length - 1];
+    var it = h && find(h.id);
+    $('lastAction').textContent = it ? 'Last count: +' + h.n + ' ' + it.name + ' (now ' + fmt(it.count) + ')' : 'Nothing to undo yet.';
+    $('undoBtn').disabled = !it;
+  }
+
+  function renderManage() {
+    $('manageList').innerHTML = state.items.length ? state.items.map(function (it) {
+      return '<div class="item"><div><b>' + esc(it.name) + '</b><div class="small">' + fmt(it.count) + ' / ' + fmt(it.target) + '</div></div>' +
+        '<div class="row"><button class="btn secondary" data-edit="' + it.id + '">Edit</button>' +
+        '<button class="btn danger" data-del="' + it.id + '">Delete</button></div></div>';
+    }).join('') : '<div class="small">None yet.</div>';
+
+    $('deletedWrap').hidden = !state.deleted.length;
+    $('deletedList').innerHTML = state.deleted.map(function (it) {
+      return '<div class="item"><div><b>' + esc(it.name) + '</b><div class="small">' + fmt(it.count) + ' / ' + fmt(it.target) + '</div></div>' +
+        '<button class="btn secondary" data-restore="' + it.id + '">Restore</button></div>';
+    }).join('');
+  }
+
+  function flash(id) {
+    var el = document.querySelector('.tap[data-id="' + id + '"]');
+    if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+  }
+
+  // ---------- Counting ----------
+  function addCount(id, n, src) {
+    var it = find(id);
+    if (!it) return 0;
+    var add = Math.min(n, it.target - it.count);
+    if (add <= 0) { if (src === 'tap') toast(it.name + ' is already complete'); return 0; }
+    it.count += add;
+    hist.push({ id: id, n: add });
+    if (hist.length > 300) hist.shift();
+    save();
+    render();
+    flash(id);
+    if (it.count >= it.target) toast('🎉 ' + it.name + ' complete! MashaAllah');
+    return add;
+  }
+
+  $('list').addEventListener('click', function (e) {
+    var card = e.target.closest('.tap');
+    if (card) addCount(card.getAttribute('data-id'), 1, 'tap');
+  });
+
+  // ---------- Undo: must be pressed and held ----------
+  function undo() {
+    while (hist.length) {
+      var h = hist.pop();
+      var it = find(h.id);
+      if (!it) continue;
+      it.count = Math.max(0, it.count - h.n);
+      save();
+      render();
+      toast('Undone: −' + h.n + ' ' + it.name + ' (now ' + fmt(it.count) + ')');
+      return;
+    }
+    render();
+    toast('Nothing to undo');
+  }
+
+  function holdToActivate(btn, ms, action) {
+    var fill = btn.querySelector('.fill');
+    var start = 0, raf = 0;
+    function reset() { cancelAnimationFrame(raf); start = 0; fill.style.width = '0'; }
+    function tick() {
+      var p = Math.min(1, (performance.now() - start) / ms);
+      fill.style.width = (p * 100) + '%';
+      if (p >= 1) { reset(); action(); return; }
+      raf = requestAnimationFrame(tick);
+    }
+    btn.addEventListener('pointerdown', function (e) {
+      if (btn.disabled) return;
+      e.preventDefault();
+      start = performance.now();
+      tick();
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) {
+      btn.addEventListener(ev, function () {
+        if (start) { reset(); toast('Keep holding to undo'); }
+      });
+    });
+    btn.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  }
+  holdToActivate($('undoBtn'), 1200, undo);
+
+  // ---------- Manage: add, edit, delete, restore ----------
+  $('manageBtn').addEventListener('click', function () {
+    var p = $('managePanel');
+    p.hidden = !p.hidden;
+    $('manageBtn').textContent = p.hidden ? '⚙️ Manage dhikr (add, edit, delete)' : 'Close manage';
+  });
+
+  var wordsTouched = false;
+  $('newName').addEventListener('input', function () {
+    if (wordsTouched) return;
+    var s = suggest($('newName').value);
+    $('newWords').value = s ? s.words.join(', ') : '';
+  });
+  $('newWords').addEventListener('input', function () { wordsTouched = $('newWords').value.trim() !== ''; });
+
+  function readNumber(v) { return parseInt(String(v).replace(/[^\d]/g, ''), 10); }
+
+  $('addBtn').addEventListener('click', function () {
+    var name = $('newName').value.trim();
+    var target = readNumber($('newTarget').value);
+    if (!name) { toast('Please enter a name'); return; }
+    if (!(target > 0)) { toast('Please enter a target number'); return; }
+    state.items.push(makeItem(name, target, 0, $('newWords').value));
+    save();
+    $('newName').value = ''; $('newTarget').value = ''; $('newWords').value = '';
+    wordsTouched = false;
+    render();
+    toast('Added ' + name);
+  });
+
+  $('managePanel').addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.edit) openEdit(b.dataset.edit);
+    if (b.dataset.del) askDelete(b.dataset.del);
+    if (b.dataset.restore) restore(b.dataset.restore);
+  });
+
+  function askDelete(id) {
+    var it = find(id);
+    if (!it) return;
+    openModal(
+      '<h3>Delete “' + esc(it.name) + '”?</h3>' +
+      '<p>It has <b>' + fmt(it.count) + '</b> of ' + fmt(it.target) + ' counted. You can restore it later from “Recently deleted”.</p>' +
+      '<label for="delConfirm">Type DELETE to confirm</label>' +
+      '<input id="delConfirm" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false">' +
+      '<div class="row" style="margin-top:14px">' +
+      '<button class="btn secondary" id="mCancel" style="flex:1">Cancel</button>' +
+      '<button class="btn danger" id="mOk" style="flex:1" disabled>Delete</button></div>'
+    );
+    $('delConfirm').addEventListener('input', function () {
+      $('mOk').disabled = $('delConfirm').value.trim().toUpperCase() !== 'DELETE';
+    });
+    $('mCancel').onclick = closeModal;
+    $('mOk').onclick = function () {
+      if ($('delConfirm').value.trim().toUpperCase() !== 'DELETE') return;
+      state.items = state.items.filter(function (x) { return x.id !== id; });
+      it.deletedAt = Date.now();
+      state.deleted.unshift(it);
+      state.deleted = state.deleted.slice(0, 30);
+      hist = hist.filter(function (h) { return h.id !== id; });
+      save();
+      closeModal();
+      render();
+      toast('Deleted. You can restore it from Recently deleted.');
+    };
+  }
+
+  function restore(id) {
+    var it = state.deleted.find(function (x) { return x.id === id; });
+    if (!it) return;
+    state.deleted = state.deleted.filter(function (x) { return x.id !== id; });
+    delete it.deletedAt;
+    state.items.push(it);
+    save();
+    render();
+    toast('Restored ' + it.name + ' (' + fmt(it.count) + ')');
+  }
+
+  function openEdit(id) {
+    var it = find(id);
+    if (!it) return;
+    openModal(
+      '<h3>Edit “' + esc(it.name) + '”</h3>' +
+      '<label for="eName">Name</label><input id="eName" value="' + esc(it.name) + '" autocomplete="off">' +
+      '<label for="eTarget">Target</label><input id="eTarget" type="text" inputmode="numeric" value="' + it.target + '" autocomplete="off">' +
+      '<label for="eCount">Current count</label><input id="eCount" type="text" inputmode="numeric" value="' + it.count + '" autocomplete="off">' +
+      '<label for="eWords">Voice words (separated by commas)</label><input id="eWords" value="' + esc(it.words.join(', ')) + '" autocomplete="off">' +
+      '<div class="row" style="margin-top:14px">' +
+      '<button class="btn secondary" id="mCancel" style="flex:1">Cancel</button>' +
+      '<button class="btn" id="mOk" style="flex:1">Save</button></div>'
+    );
+    $('mCancel').onclick = closeModal;
+    $('mOk').onclick = function () {
+      var name = $('eName').value.trim();
+      var target = readNumber($('eTarget').value);
+      var count = readNumber($('eCount').value);
+      if (!name) { toast('Please enter a name'); return; }
+      if (!(target > 0)) { toast('Please enter a target number'); return; }
+      if (!(count >= 0)) { toast('Please enter a count'); return; }
+      count = Math.min(count, target);
+      if (count !== it.count &&
+          !confirm('Change the count of ' + name + ' from ' + fmt(it.count) + ' to ' + fmt(count) + '?')) return;
+      it.name = name;
+      it.target = target;
+      if (count !== it.count) { it.count = count; hist = hist.filter(function (h) { return h.id !== id; }); }
+      it.words = parseWords($('eWords').value);
+      save();
+      closeModal();
+      render();
+      toast('Saved');
+    };
+  }
+
+  // ---------- Voice counting ----------
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var rec = null, listening = false, counted = [], errTimes = [], wakeLock = null;
+
+  $('lang').value = state.lang;
+  $('lang').addEventListener('change', function () {
+    state.lang = $('lang').value;
+    save();
+    if (listening) { stopVoice(); startVoice(); }
+  });
+
+  function vstatus(t) { $('voiceStatus').textContent = t; }
+  function setVoiceUI() {
+    var b = $('voiceBtn');
+    b.textContent = listening ? '⏹ Stop voice counting' : '🎙️ Start voice counting';
+    b.classList.toggle('listening', listening);
+  }
+
+  function keepAwake(on) {
+    try {
+      if (on && 'wakeLock' in navigator && !wakeLock) {
+        navigator.wakeLock.request('screen').then(function (w) {
+          wakeLock = w;
+          w.addEventListener('release', function () { wakeLock = null; });
+        }).catch(function () {});
+      } else if (!on && wakeLock) {
+        wakeLock.release().catch(function () {});
+        wakeLock = null;
+      }
+    } catch (e) {}
+  }
+
+  // Count each dhikr in a piece of heard text; longer phrases are matched first
+  function matchCounts(text) {
+    var t = norm(text), pairs = [], res = {};
+    state.items.forEach(function (it) {
+      it.words.forEach(function (w) { var n = norm(w); if (n.length >= 3) pairs.push([it.id, n]); });
+    });
+    pairs.sort(function (a, b) { return b[1].length - a[1].length; });
+    pairs.forEach(function (p) {
+      var idx;
+      while ((idx = t.indexOf(p[1])) !== -1) {
+        res[p[0]] = (res[p[0]] || 0) + 1;
+        t = t.slice(0, idx) + '|' + t.slice(idx + p[1].length);
+      }
+    });
+    return res;
+  }
+
+  function startVoice() {
+    if (!SR) { vstatus('Voice counting is not supported in this browser.'); return; }
+    if (!state.items.some(function (i) { return i.count < i.target && i.words.length; })) {
+      vstatus('Add a dhikr with voice words first (Manage dhikr).');
+      return;
+    }
+    listening = true;
+    errTimes = [];
+    setVoiceUI();
+    keepAwake(true);
+    launch();
+  }
+
+  function stopVoice(msg) {
+    listening = false;
+    var old = rec;
+    rec = null;
+    try { if (old) old.abort(); } catch (e) {}
+    setVoiceUI();
+    keepAwake(false);
+    vstatus(msg || 'Stopped.');
+  }
+
+  function launch() {
+    if (!listening) return;
+    var r = new SR();
+    rec = r;
+    counted = [];
+    r.lang = state.lang || 'ar-SA';
+    r.continuous = true;
+    r.interimResults = true;
+    r.maxAlternatives = 1;
+
+    r.onstart = function () { if (r === rec) vstatus('Listening… say each dhikr clearly with a short pause.'); };
+
+    r.onresult = function (e) {
+      if (r !== rec) return;
+      var last = '', lastFinal = false;
+      for (var i = 0; i < e.results.length; i++) {
+        var tr = e.results[i][0].transcript || '';
+        last = tr; lastFinal = e.results[i].isFinal;
+        var m = matchCounts(tr);
+        var prev = counted[i] || (counted[i] = {});
+        Object.keys(m).forEach(function (id) {
+          var d = m[id] - (prev[id] || 0);
+          if (d > 0) { prev[id] = m[id]; addCount(id, d, 'voice'); }
+        });
+      }
+      var none = lastFinal && !Object.keys(matchCounts(last)).length;
+      $('heard').textContent = last ? 'Heard: “' + last.trim() + '”' + (none ? ' — not recognised' : '') : '';
+    };
+
+    r.onerror = function (e) {
+      if (r !== rec) return;
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        stopVoice('Microphone access is blocked. Allow it in Settings, then tap Start.');
+      } else if (document.hidden) {
+        stopVoice('Voice stopped because you left the app. Tap Start to continue.');
+      } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
+        var now = Date.now();
+        errTimes.push(now);
+        errTimes = errTimes.filter(function (t) { return now - t < 15000; });
+        if (errTimes.length > 4) stopVoice('Voice keeps stopping (' + e.error + '). Tap Start to try again.');
+      }
+    };
+
+    r.onend = function () {
+      if (r !== rec || !listening) return;
+      if (document.hidden) { stopVoice('Voice stopped because you left the app. Tap Start to continue.'); return; }
+      setTimeout(function () {
+        if (listening && r === rec) launch();
+      }, 300);
+    };
+
+    try { r.start(); }
+    catch (err) { stopVoice('Could not start the microphone. Tap Start to try again.'); }
+  }
+
+  $('voiceBtn').addEventListener('click', function () {
+    if (listening) stopVoice(); else startVoice();
+  });
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden && listening) stopVoice('Voice stopped because you left the app. Tap Start to continue.');
+  });
+
+  // ---------- Start ----------
+  render();
+  if (migrated) toast('Your earlier counts were loaded ✓');
+})();
+</script>
+</body>
+</html>
+
