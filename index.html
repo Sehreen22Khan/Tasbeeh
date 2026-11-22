@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tasbih</title>
+<style>
+body{font-family:sans-serif;background:#0f3d2e;color:#fff;text-align:center;margin:0;padding:10px}
+.d{background:#1b5e45;border-radius:14px;margin:10px 0;padding:12px}
+.n{font-size:26px}.c{font-size:22px;margin:6px}
+button{font-size:20px;border:none;border-radius:10px;padding:14px;margin:4px}
+.tap{width:100%;font-size:28px;padding:30px;background:#f2c94c}
+.done{opacity:.5}
+</style></head><body>
+<h2>Tasbih Counter</h2>
+<div id="app"></div>
+<script>
+const GOAL=200000;
+const names=["SubhanAllah","Alhamdulillah","Allahu Akbar","Astaghfirullah"];
+let c=JSON.parse(localStorage.getItem("tasbih")||"[0,0,0,0]");
+function save(){localStorage.setItem("tasbih",JSON.stringify(c))}
+function tap(i){if(c[i]<GOAL){c[i]++;save();draw();if(navigator.vibrate)navigator.vibrate(15)}}
+function undo(i){if(c[i]>0){c[i]--;save();draw()}}
+function draw(){
+ document.getElementById("app").innerHTML=names.map((n,i)=>`
+ <div class="d ${c[i]>=GOAL?'done':''}">
+  <div class="n">${n}</div>
+  <div class="c">${c[i].toLocaleString()} / ${GOAL.toLocaleString()}</div>
+  <button class="tap" onclick="tap(${i})">${c[i]>=GOAL?'Complete ✓':'Tap'}</button>
+  <button onclick="undo(${i})">Undo</button>
+ </div>`).join("")}
+draw();
+</script></body></html>
