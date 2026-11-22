@@ -6,18 +6,28 @@
 body{font-family:sans-serif;background:#0f3d2e;color:#fff;text-align:center;margin:0;padding:10px}
 .d{background:#1b5e45;border-radius:14px;margin:10px 0;padding:12px}
 .n{font-size:26px}.c{font-size:22px;margin:6px}
-button{font-size:20px;border:none;border-radius:10px;padding:14px;margin:4px}
+button,select{font-size:20px;border:none;border-radius:10px;padding:14px;margin:4px}
 .tap{width:100%;font-size:28px;padding:30px;background:#f2c94c}
 .done{opacity:.5}
+#vbtn{background:#4caf50;color:#fff;width:100%}
+#vbtn.on{background:#c0392b}
+#heard{min-height:24px;font-size:16px;opacity:.8}
 </style></head><body>
 <h2>Tasbih Counter</h2>
+<div class="d">
+ <select id="lang"><option value="ar-SA">Arabic</option><option value="en-US">English</option></select>
+ <button id="vbtn" onclick="toggleVoice()">🎤 Start Voice Counting</button>
+ <div id="heard"></div>
+</div>
 <div id="app"></div>
 <script>
 const GOAL=200000;
 const names=["SubhanAllah","Alhamdulillah","Allahu Akbar","Astaghfirullah"];
+const pats=[/subhan|سبحان/g,/hamd|حمد/g,/akbar|اكبر|أكبر/g,/staghfir|استغفر/g];
 let c=JSON.parse(localStorage.getItem("tasbih")||"[0,0,0,0]");
 function save(){localStorage.setItem("tasbih",JSON.stringify(c))}
-function tap(i){if(c[i]<GOAL){c[i]++;save();draw();if(navigator.vibrate)navigator.vibrate(15)}}
+function add(i,n){c[i]=Math.min(GOAL,c[i]+n);save();draw()}
+function tap(i){if(c[i]<GOAL){add(i,1);if(navigator.vibrate)navigator.vibrate(15)}}
 function undo(i){if(c[i]>0){c[i]--;save();draw()}}
 function draw(){
  document.getElementById("app").innerHTML=names.map((n,i)=>`
@@ -27,5 +37,29 @@ function draw(){
   <button class="tap" onclick="tap(${i})">${c[i]>=GOAL?'Complete ✓':'Tap'}</button>
   <button onclick="undo(${i})">Undo</button>
  </div>`).join("")}
+
+let rec,on=false,lock=null;
+function heard(t){
+ t=t.toLowerCase().replace(/\s+/g,"");
+ let msg=[];
+ pats.forEach((p,i)=>{const m=(t.match(p)||[]).length;if(m&&c[i]<GOAL){add(i,m);msg.push(names[i]+" +"+m)}});
+ document.getElementById("heard").textContent=msg.length?msg.join(", "):"(not recognised)";
+}
+async function toggleVoice(){
+ const b=document.getElementById("vbtn");
+ if(on){on=false;rec&&rec.stop();if(lock){lock.release();lock=null}
+  b.classList.remove("on");b.textContent="🎤 Start Voice Counting";return}
+ const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!SR){alert("Voice recognition isn't supported here. Try opening in Safari.");return}
+ rec=new SR();rec.lang=document.getElementById("lang").value;
+ rec.continuous=true;rec.interimResults=false;
+ rec.onresult=e=>{for(let r=e.resultIndex;r<e.results.length;r++)
+  if(e.results[r].isFinal)heard(e.results[r][0].transcript)};
+ rec.onend=()=>{if(on)setTimeout(()=>{try{rec.start()}catch(x){}},300)};
+ rec.onerror=e=>{document.getElementById("heard").textContent="Mic: "+e.error};
+ try{rec.start()}catch(x){}
+ on=true;b.classList.add("on");b.textContent="⏹ Stop Voice Counting";
+ try{lock=await navigator.wakeLock.request("screen")}catch(x){}
+}
 draw();
 </script></body></html>
