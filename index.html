@@ -1,4 +1,12 @@
 <!DOCTYPE html>
+<!--
+  RULES FOR EVERY UPDATE — people's counts depend on these:
+  1. Never change the storage name: tasbeeh-data-v4
+  2. Only ADD new saved fields. Never rename or remove existing ones
+     (items, deleted, lang, lastBackup, id, name, target, count, words).
+  3. Never reset or overwrite counts when the page loads.
+  4. Never rename the GitHub username or the Tasbeeh repo.
+-->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -36,7 +44,8 @@ h3{margin:18px 0 6px;font-size:16px}
 .btn:disabled{opacity:.4}
 .row{display:flex;gap:8px;align-items:center}
 label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
-input,select{width:100%;padding:11px;border:1px solid #d6d0c2;border-radius:10px;font:inherit;font-size:16px;background:#fff;color:var(--text)}
+textarea{min-height:110px;resize:vertical;font-size:14px}
+input,select,textarea{width:100%;padding:11px;border:1px solid #d6d0c2;border-radius:10px;font:inherit;font-size:16px;background:#fff;color:var(--text)}
 .hold{position:relative;overflow:hidden;width:100%;background:#e9e4d8;color:var(--text);touch-action:none;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
 .hold .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(176,42,55,.3)}
 .hold .lbl{position:relative}
@@ -87,8 +96,12 @@ input,select{width:100%;padding:11px;border:1px solid #d6d0c2;border-radius:10px
     <input id="newName" placeholder="e.g. SubhanAllah" autocomplete="off">
     <label for="newTarget">Target</label>
     <input id="newTarget" type="text" inputmode="numeric" placeholder="e.g. 200000" autocomplete="off">
-    <label for="newWords">Voice words (optional, separated by commas)</label>
-    <input id="newWords" placeholder="Filled in automatically for common adhkar" autocomplete="off">
+    <label for="newWords">Voice words (separated by commas)</label>
+    <div class="row">
+      <input id="newWords" placeholder="Filled in for common adhkar" autocomplete="off">
+      <button class="btn secondary" id="newRec" type="button" style="white-space:nowrap">🎙️ Record</button>
+    </div>
+    <div class="small" style="margin-top:6px">Voice mode listens for these words. Tap <b>Record</b> and say the dhikr once, and it saves exactly how your phone hears it.</div>
     <button class="btn" id="addBtn" style="width:100%;margin-top:12px">Add dhikr</button>
 
     <h3>Your dhikr</h3>
@@ -99,6 +112,20 @@ input,select{width:100%;padding:11px;border:1px solid #d6d0c2;border-radius:10px
       <div class="small">Deleted dhikr keep their counts here and can be restored.</div>
       <div id="deletedList"></div>
     </div>
+  </div>
+
+  <button class="btn secondary" id="backupBtn" style="width:100%;margin-top:12px">💾 Backup &amp; restore</button>
+
+  <div class="panel" id="backupPanel" hidden style="margin-top:12px">
+    <h3 style="margin-top:0">Save a backup</h3>
+    <div class="small">Saves all your counts as text. Choose <b>Notes</b> (or Copy) in the share menu and keep it safe.</div>
+    <button class="btn" id="makeBackup" style="width:100%;margin-top:10px">Save a backup</button>
+
+    <h3>Restore from a backup</h3>
+    <div class="small">Paste the whole backup text here.</div>
+    <textarea id="restoreText" placeholder="Paste your backup here" autocomplete="off" autocorrect="off" spellcheck="false" style="margin-top:6px"></textarea>
+    <button class="btn secondary" id="restoreBtn" style="width:100%;margin-top:10px">Restore from backup</button>
+    <button class="btn secondary" id="undoRestore" style="width:100%;margin-top:10px" hidden>↩︎ Undo last restore</button>
   </div>
 </main>
 
@@ -172,8 +199,21 @@ input,select{width:100%;padding:11px;border:1px solid #d6d0c2;border-radius:10px
     target = Math.max(1, Math.floor(Number(target) || DEFAULT_TARGET));
     count = Math.min(target, Math.max(0, Math.floor(Number(count) || 0)));
     words = parseWords(words);
-    if (!words.length) { var s = suggest(name); if (s) words = s.words.slice(); }
+    if (!words.length) words = defaultWords(name);
     return { id: uid(), name: String(name).trim(), target: target, count: count, words: words };
+  }
+
+  // Every dhikr gets voice words: known adhkar get Arabic + English, anything else uses its own name
+  function defaultWords(name) {
+    var s = suggest(name);
+    return s ? s.words.slice() : [String(name).trim()];
+  }
+
+  // Does this dhikr have voice words in the script the chosen voice language writes?
+  function fitsLang(words, lang) {
+    var ar = words.some(function (w) { return /[\u0600-\u06FF]/.test(w); });
+    var lat = words.some(function (w) { return /[a-z]/i.test(w); });
+    return lang === 'en-US' ? lat : ar;
   }
 
   // ---------- Loading, including counts saved by earlier versions ----------
@@ -307,7 +347,9 @@ input,select{width:100%;padding:11px;border:1px solid #d6d0c2;border-radius:10px
 
   function renderManage() {
     $('manageList').innerHTML = state.items.length ? state.items.map(function (it) {
-      return '<div class="item"><div><b>' + esc(it.name) + '</b><div class="small">' + fmt(it.count) + ' / ' + fmt(it.target) + '</div></div>' +
+      var voice = fitsLang(it.words, state.lang) ? '🎙️ Voice ready' : '⚠️ For voice: tap Edit, then Record';
+      return '<div class="item"><div><b>' + esc(it.name) + '</b><div class="small">' + fmt(it.count) + ' / ' + fmt(it.target) + '</div>' +
+        '<div class="small">' + voice + '</div></div>' +
         '<div class="row"><button class="btn secondary" data-edit="' + it.id + '">Edit</button>' +
         '<button class="btn danger" data-del="' + it.id + '">Delete</button></div></div>';
     }).join('') : '<div class="small">None yet.</div>';
@@ -408,13 +450,17 @@ input,select{width:100%;padding:11px;border:1px solid #d6d0c2;border-radius:10px
     var target = readNumber($('newTarget').value);
     if (!name) { toast('Please enter a name'); return; }
     if (!(target > 0)) { toast('Please enter a target number'); return; }
-    state.items.push(makeItem(name, target, 0, $('newWords').value));
+    var item = makeItem(name, target, 0, $('newWords').value);
+    state.items.push(item);
     save();
     $('newName').value = ''; $('newTarget').value = ''; $('newWords').value = '';
     wordsTouched = false;
     render();
-    toast('Added ' + name);
+    toast(fitsLang(item.words, state.lang) ? 'Added ' + name
+      : 'Added ' + name + '. For voice, tap Edit → Record and say it once.');
   });
+
+  $('newRec').addEventListener('click', function () { recordInto($('newWords'), $('newRec')); });
 
   $('managePanel').addEventListener('click', function (e) {
     var b = e.target.closest('button');
@@ -473,11 +519,15 @@ input,select{width:100%;padding:11px;border:1px solid #d6d0c2;border-radius:10px
       '<label for="eName">Name</label><input id="eName" value="' + esc(it.name) + '" autocomplete="off">' +
       '<label for="eTarget">Target</label><input id="eTarget" type="text" inputmode="numeric" value="' + it.target + '" autocomplete="off">' +
       '<label for="eCount">Current count</label><input id="eCount" type="text" inputmode="numeric" value="' + it.count + '" autocomplete="off">' +
-      '<label for="eWords">Voice words (separated by commas)</label><input id="eWords" value="' + esc(it.words.join(', ')) + '" autocomplete="off">' +
+      '<label for="eWords">Voice words (separated by commas)</label>' +
+      '<div class="row"><input id="eWords" value="' + esc(it.words.join(', ')) + '" autocomplete="off">' +
+      '<button class="btn secondary" id="eRec" type="button" style="white-space:nowrap">🎙️ Record</button></div>' +
+      '<div class="small" style="margin-top:6px">Tap Record and say the dhikr once to teach voice mode.</div>' +
       '<div class="row" style="margin-top:14px">' +
       '<button class="btn secondary" id="mCancel" style="flex:1">Cancel</button>' +
       '<button class="btn" id="mOk" style="flex:1">Save</button></div>'
     );
+    $('eRec').onclick = function () { recordInto($('eWords'), $('eRec')); };
     $('mCancel').onclick = closeModal;
     $('mOk').onclick = function () {
       var name = $('eName').value.trim();
@@ -493,6 +543,7 @@ input,select{width:100%;padding:11px;border:1px solid #d6d0c2;border-radius:10px
       it.target = target;
       if (count !== it.count) { it.count = count; hist = hist.filter(function (h) { return h.id !== id; }); }
       it.words = parseWords($('eWords').value);
+      if (!it.words.length) it.words = defaultWords(name);
       save();
       closeModal();
       render();
@@ -508,6 +559,7 @@ input,select{width:100%;padding:11px;border:1px solid #d6d0c2;border-radius:10px
   $('lang').addEventListener('change', function () {
     state.lang = $('lang').value;
     save();
+    render();
     if (listening) { stopVoice(); startVoice(); }
   });
 
@@ -635,11 +687,202 @@ input,select{width:100%;padding:11px;border:1px solid #d6d0c2;border-radius:10px
     if (document.hidden && listening) stopVoice('Voice stopped because you left the app. Tap Start to continue.');
   });
 
+  // ---------- Record a voice word: listens once and saves what the phone heard ----------
+  var recOnce = null;
+  function recordInto(input, btn) {
+    if (!SR) { toast('Voice is not supported in this browser'); return; }
+    if (recOnce) { var o = recOnce; recOnce = null; try { o.abort(); } catch (e) {} btn.textContent = '🎙️ Record'; return; }
+    if (listening) stopVoice('Voice counting paused while recording a voice word. Tap Start to continue.');
+    var r = new SR(), got = false;
+    recOnce = r;
+    r.lang = state.lang || 'ar-SA';
+    r.continuous = false;
+    r.interimResults = false;
+    r.maxAlternatives = 1;
+    btn.textContent = 'Listening…';
+    r.onresult = function (e) {
+      var tr = (e.results[0] && e.results[0][0].transcript || '').trim();
+      if (!tr) return;
+      got = true;
+      var words = parseWords(input.value);
+      if (words.map(norm).indexOf(norm(tr)) === -1) words.push(tr);
+      input.value = words.join(', ');
+      input.dispatchEvent(new Event('input'));
+      toast('Saved voice word: “' + tr + '”');
+    };
+    r.onerror = function (e) {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('Microphone access is blocked. Allow it in Settings.');
+    };
+    r.onend = function () {
+      btn.textContent = '🎙️ Record';
+      if (recOnce !== r) return; // cancelled
+      recOnce = null;
+      if (!got) toast('Didn’t catch that. Tap Record and say it once more.');
+    };
+    try { r.start(); }
+    catch (err) { recOnce = null; btn.textContent = '🎙️ Record'; toast('Could not start the microphone'); }
+  }
+
+  // ---------- Backup and restore ----------
+  var SAFETY_KEY = 'tasbeeh-before-restore';
+
+  function b64enc(s) {
+    var bytes = new TextEncoder().encode(s), bin = '';
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  }
+  function b64dec(b) {
+    var bin = atob(b), bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+  function fmtDate(t) {
+    try { return new Date(t).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }); }
+    catch (e) { return new Date(t).toString(); }
+  }
+
+  function backupText() {
+    var lines = ['Tasbeeh backup — ' + fmtDate(Date.now())];
+    state.items.forEach(function (it) { lines.push(it.name + ': ' + fmt(it.count) + ' / ' + fmt(it.target)); });
+    lines.push('', 'Keep everything below to restore:');
+    lines.push('CODE:' + b64enc(JSON.stringify({ app: 'tasbeeh', v: 4, data: state })));
+    return lines.join('\n');
+  }
+
+  // Turn any saved data into a clean state, keeping ids, names, targets, counts and words
+  function sanitize(d) {
+    if (!d || !Array.isArray(d.items)) return null;
+    function clean(x) {
+      if (!x || typeof x !== 'object' || !x.name) return null;
+      var target = Math.max(1, Math.floor(Number(x.target) || DEFAULT_TARGET));
+      var count = Math.min(target, Math.max(0, Math.floor(Number(x.count) || 0)));
+      var words = parseWords(x.words);
+      if (!words.length) words = defaultWords(x.name);
+      return { id: String(x.id || uid()), name: String(x.name), target: target, count: count, words: words };
+    }
+    var out = {
+      items: d.items.map(clean).filter(Boolean),
+      deleted: (Array.isArray(d.deleted) ? d.deleted : []).map(clean).filter(Boolean),
+      lang: d.lang === 'en-US' ? 'en-US' : 'ar-SA'
+    };
+    if (d.lastBackup) out.lastBackup = d.lastBackup;
+    return out;
+  }
+
+  function parseBackup(text) {
+    var t = String(text || '');
+    var i = t.indexOf('CODE:');
+    var code = (i >= 0 ? t.slice(i + 5) : t).replace(/\s+/g, '');
+    var obj = null;
+    try { obj = JSON.parse(b64dec(code)); } catch (e) {
+      try { obj = JSON.parse(t); } catch (e2) { return null; }
+    }
+    return sanitize(obj && obj.data ? obj.data : obj);
+  }
+
+  function renderBackup() {
+    $('backupBtn').textContent = '💾 Backup & restore · last backup: ' + (state.lastBackup ? fmtDate(state.lastBackup) : 'never');
+    var hasSafety = false;
+    try { hasSafety = !!localStorage.getItem(SAFETY_KEY); } catch (e) {}
+    $('undoRestore').hidden = !hasSafety;
+  }
+
+  function backupDone() {
+    state.lastBackup = Date.now();
+    save();
+    renderBackup();
+    toast('Backup saved ✓');
+  }
+
+  function showBackupText(text) {
+    openModal(
+      '<h3>Your backup</h3><div class="small">Copy all of this and keep it in Notes.</div>' +
+      '<textarea id="bkText" readonly style="margin-top:8px;min-height:180px">' + esc(text) + '</textarea>' +
+      '<div class="row" style="margin-top:12px">' +
+      '<button class="btn secondary" id="mCancel" style="flex:1">Close</button>' +
+      '<button class="btn" id="mOk" style="flex:1">Copy</button></div>'
+    );
+    $('mCancel').onclick = closeModal;
+    $('mOk').onclick = function () {
+      var ta = $('bkText');
+      ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length);
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) {}
+      if (ok) { closeModal(); backupDone(); toast('Backup copied. Paste it into Notes.'); }
+      else toast('Select all the text and tap Copy');
+    };
+  }
+
+  $('backupBtn').addEventListener('click', function () {
+    var p = $('backupPanel');
+    p.hidden = !p.hidden;
+  });
+
+  $('makeBackup').addEventListener('click', function () {
+    var text = backupText();
+    if (navigator.share) {
+      navigator.share({ title: 'Tasbeeh backup', text: text }).then(backupDone).catch(function (e) {
+        if (e && e.name === 'AbortError') return;
+        showBackupText(text);
+      });
+    } else if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { backupDone(); toast('Backup copied. Paste it into Notes.'); })
+        .catch(function () { showBackupText(text); });
+    } else {
+      showBackupText(text);
+    }
+  });
+
+  function applyState(next) {
+    if (listening) stopVoice();
+    state = next;
+    hist = [];
+    save();
+    $('lang').value = state.lang;
+    render();
+    renderBackup();
+  }
+
+  $('restoreBtn').addEventListener('click', function () {
+    var d = parseBackup($('restoreText').value);
+    if (!d) { toast('That doesn’t look like a Tasbeeh backup. Paste the whole text.'); return; }
+    var list = d.items.length ? d.items.map(function (it) {
+      return '<div>' + esc(it.name) + ': <b>' + fmt(it.count) + '</b> / ' + fmt(it.target) + '</div>';
+    }).join('') : '<div>(no dhikr)</div>';
+    openModal(
+      '<h3>Restore this backup?</h3><p>Your counts will be replaced with:</p>' + list +
+      '<p class="small">Your current counts are kept as a safety copy, so you can undo this.</p>' +
+      '<div class="row" style="margin-top:14px">' +
+      '<button class="btn secondary" id="mCancel" style="flex:1">Cancel</button>' +
+      '<button class="btn" id="mOk" style="flex:1">Restore</button></div>'
+    );
+    $('mCancel').onclick = closeModal;
+    $('mOk').onclick = function () {
+      try { localStorage.setItem(SAFETY_KEY, JSON.stringify(state)); }
+      catch (e) { toast('⚠️ Could not make a safety copy, so nothing was changed'); closeModal(); return; }
+      applyState(d);
+      $('restoreText').value = '';
+      closeModal();
+      toast('Backup restored ✓');
+    };
+  });
+
+  $('undoRestore').addEventListener('click', function () {
+    var prev = null;
+    try { prev = sanitize(JSON.parse(localStorage.getItem(SAFETY_KEY))); } catch (e) {}
+    if (!prev) { toast('No safety copy found'); return; }
+    if (!confirm('Go back to the counts you had before the last restore?')) return;
+    applyState(prev);
+    try { localStorage.removeItem(SAFETY_KEY); } catch (e) {}
+    renderBackup();
+    toast('Restore undone ✓');
+  });
+
   // ---------- Start ----------
+  renderBackup();
   render();
   if (migrated) toast('Your earlier counts were loaded ✓');
 })();
 </script>
 </body>
 </html>
-
