@@ -397,7 +397,11 @@ input::placeholder,textarea::placeholder{color:#62706a}
     toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2600);
   }
   function openModal(html) { $('modal').innerHTML = html; $('overlay').classList.add('show'); }
-  function closeModal() { $('overlay').classList.remove('show'); $('modal').innerHTML = ''; }
+  function closeModal() {
+    // Closing the edit window also stops a voice-word recording that was filling it
+    if (sess && sess.kind === 'record' && $('modal').contains(sess.btn)) cancelRecording();
+    $('overlay').classList.remove('show'); $('modal').innerHTML = '';
+  }
 
   // ---------- Rendering ----------
   function render() {
@@ -633,36 +637,65 @@ input::placeholder,textarea::placeholder{color:#62706a}
   }
 
   // ---------- Voice counting ----------
+  // Phones give the microphone to one listener at a time and can take it away without
+  // warning: another app using voice, a call, leaving the app. Safari also reports most
+  // failures as "aborted", and sometimes sends an error without ever saying it has ended.
+  // So voice mode uses one listener at a time, treats any error as the end of that
+  // listener, only says "Listening" once sound is really coming in, waits longer between
+  // tries while the microphone keeps failing, and carries on by itself when you come back.
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  var rec = null, listening = false, counted = [], errTimes = [], wakeLock = null;
+  var LISTENING = 'Listening… say each dhikr clearly with a short pause.';
+  var QUIET = 'Listening… nothing heard for a while. If you’re speaking and nothing shows here, close Tasbeeh fully and open it again.';
+  var RESUME_WITHIN = 10 * 60 * 1000; // come back within 10 minutes and voice carries on
+  var MAX_FAILS = 10;                 // failed tries in a row before giving up
+  var QUIET_MS = 30000;               // no words for 30 seconds: swap in a fresh listener
+
+  var voiceOn = false;   // voice counting is switched on
+  var sess = null;       // the listener whose events count; anything older is ignored
+  var busy = null;       // the newest recogniser, until it has finished
+  var idleWaiters = [];
+  var fails = 0, denials = 0, retryTimer = 0, awayAt = 0, lastHeard = 0, woke = false;
+  var micOK = false;     // a listener has started on this page, so the microphone is allowed
+  var wakeLock = null, wakeWanted = false, wakePending = false;
 
   $('lang').value = state.lang;
   $('lang').addEventListener('change', function () {
     state.lang = $('lang').value;
     save();
     render();
-    if (listening) { stopVoice(); startVoice(); }
+    if (voiceOn && !awayAt) { // switch the listener over to the new language
+      closeSession();
+      fails = 0;
+      vstatus('Starting the microphone…');
+      listen();
+    }
   });
 
   function vstatus(t) { $('voiceStatus').textContent = t; }
   function setVoiceUI() {
     var b = $('voiceBtn');
-    b.textContent = listening ? '⏹ Stop voice counting' : '🎙️ Start voice counting';
-    b.classList.toggle('listening', listening);
+    b.textContent = voiceOn ? '⏹ Stop voice counting' : '🎙️ Start voice counting';
+    b.classList.toggle('listening', voiceOn);
   }
 
+  // Keep the screen on while voice counting is on
   function keepAwake(on) {
+    wakeWanted = on;
     try {
-      if (on && 'wakeLock' in navigator && !wakeLock) {
+      if (on && !wakeLock && !wakePending && 'wakeLock' in navigator) {
+        wakePending = true;
         navigator.wakeLock.request('screen').then(function (w) {
+          wakePending = false;
+          if (!wakeWanted) { w.release().catch(function () {}); return; }
           wakeLock = w;
-          w.addEventListener('release', function () { wakeLock = null; });
-        }).catch(function () {});
+          w.addEventListener('release', function () { if (wakeLock === w) wakeLock = null; });
+        }, function () { wakePending = false; });
       } else if (!on && wakeLock) {
-        wakeLock.release().catch(function () {});
+        var lock = wakeLock;
         wakeLock = null;
+        lock.release().catch(function () {});
       }
-    } catch (e) {}
+    } catch (e) { wakePending = false; }
   }
 
   // Count each dhikr in a piece of heard text; longer phrases are matched first
@@ -682,126 +715,345 @@ input::placeholder,textarea::placeholder{color:#62706a}
     return res;
   }
 
+  // ----- One recogniser at a time -----
+  // Starting a recogniser while the last one still holds the microphone makes phones cut
+  // one of them off, so a new one waits until the last one has finished.
+  function whenIdle(fn) {
+    if (!busy) { fn(); return; }
+    var done = false;
+    function go() { if (!done) { done = true; fn(); } }
+    idleWaiters.push(go);
+    setTimeout(go, 1500); // if it never says it has finished, go ahead anyway
+  }
+  function markIdle(r) {
+    if (busy !== r) return;
+    busy = null;
+    var waiting = idleWaiters;
+    idleWaiters = [];
+    waiting.forEach(function (go) { go(); });
+  }
+
+  // Create and start a recogniser for session s. Its events reach h only while s is current.
+  // Safari sometimes sends an error and never "end", so an error also ends it shortly after.
+  function openRec(s, continuous, interim, h) {
+    var r = new SR(), over = false;
+    r.lang = state.lang || 'ar-SA';
+    r.continuous = continuous;
+    r.interimResults = interim;
+    r.maxAlternatives = 1;
+    s.r = r;
+    s.t0 = Date.now();
+    function live() { return sess === s; }
+    function finish() {
+      if (over) return;
+      over = true;
+      markIdle(r);
+      if (live()) h.end();
+    }
+    r.onstart = function () { micOK = true; denials = 0; if (live() && h.start) h.start(); };
+    r.onaudiostart = function () { if (live() && h.audio) h.audio(); };
+    r.onresult = function (e) { if (live()) h.result(e); };
+    r.onerror = function (e) { if (live()) h.error(e.error || 'unknown'); setTimeout(finish, 600); };
+    r.onend = finish;
+    busy = r;
+    try { r.start(); }
+    catch (err) { over = true; markIdle(r); throw err; }
+  }
+
+  // Switch the current recogniser off and ignore anything it still sends
+  function closeSession() {
+    var s = sess;
+    sess = null;
+    if (!s) return;
+    clearTimeout(s.timer);
+    if (s.r) { try { s.r.abort(); } catch (e) {} }
+  }
+
+  // Run fn after ms, if session s is still the current one by then
+  function watch(s, ms, fn) {
+    clearTimeout(s.timer);
+    s.timer = setTimeout(function () { if (sess === s) fn(); }, ms);
+  }
+
+  // ----- Counting -----
   function startVoice() {
     if (!SR) { vstatus('Voice counting is not supported in this browser.'); return; }
     if (!state.items.some(function (i) { return i.count < i.target && i.words.length; })) {
       vstatus('Add a dhikr with voice words first (Manage dhikr).');
       return;
     }
-    listening = true;
-    errTimes = [];
+    cancelRecording();
+    voiceOn = true;
+    awayAt = 0;
+    fails = 0; denials = 0; woke = false;
+    lastHeard = Date.now();
+    $('heard').textContent = '';
     setVoiceUI();
     keepAwake(true);
-    launch();
+    vstatus('Starting the microphone…');
+    listen();
   }
 
   function stopVoice(msg) {
-    listening = false;
-    var old = rec;
-    rec = null;
-    try { if (old) old.abort(); } catch (e) {}
+    voiceOn = false;
+    awayAt = 0;
+    clearTimeout(retryTimer);
+    if (sess && sess.kind === 'count') closeSession();
     setVoiceUI();
     keepAwake(false);
     vstatus(msg || 'Stopped.');
   }
 
-  function launch() {
-    if (!listening) return;
-    var r = new SR();
-    rec = r;
-    counted = [];
-    r.lang = state.lang || 'ar-SA';
-    r.continuous = true;
-    r.interimResults = true;
-    r.maxAlternatives = 1;
-
-    r.onstart = function () { if (r === rec) vstatus('Listening… say each dhikr clearly with a short pause.'); };
-
-    r.onresult = function (e) {
-      if (r !== rec) return;
-      var last = '', lastFinal = false;
-      for (var i = 0; i < e.results.length; i++) {
-        var tr = e.results[i][0].transcript || '';
-        last = tr; lastFinal = e.results[i].isFinal;
-        var m = matchCounts(tr);
-        var prev = counted[i] || (counted[i] = {});
-        Object.keys(m).forEach(function (id) {
-          var d = m[id] - (prev[id] || 0);
-          if (d > 0) { prev[id] = m[id]; addCount(id, d, 'voice'); }
+  // Start a fresh listener for voice counting
+  function listen() {
+    clearTimeout(retryTimer);
+    if (!voiceOn || awayAt) return;
+    if (document.hidden) { pauseVoice(); return; }
+    var s = { kind: 'count', counted: [], audio: false, heard: false, err: '' };
+    sess = s;
+    whenIdle(function () {
+      if (sess !== s) return;
+      try {
+        openRec(s, true, true, {
+          start: function () {
+            // Started, but it only counts as listening once sound is coming in
+            if ('onaudiostart' in s.r) watch(s, 6000, function () { s.err = 'no-audio'; closeSession(); retry(s); });
+            else gotAudio(s);
+          },
+          audio: function () { gotAudio(s); },
+          result: function (e) { onVoiceResult(s, e); },
+          error: function (code) { onVoiceError(s, code); },
+          end: function () { onVoiceEnd(s); }
         });
+      } catch (err) {
+        sess = null;
+        s.err = 'start';
+        retry(s);
+        return;
       }
-      var none = lastFinal && !Object.keys(matchCounts(last)).length;
-      $('heard').textContent = last ? 'Heard: “' + last.trim() + '”' + (none ? ' — not recognised' : '') : '';
-    };
+      // Once the microphone has been allowed here, starting takes a moment, not 10 seconds
+      if (micOK) watch(s, 10000, function () { s.err = 'no-start'; closeSession(); retry(s); });
+    });
+  }
 
-    r.onerror = function (e) {
-      if (r !== rec) return;
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        stopVoice('Microphone access is blocked. Allow it in Settings, then tap Start.');
-      } else if (document.hidden) {
-        stopVoice('Voice stopped because you left the app. Tap Start to continue.');
-      } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
-        var now = Date.now();
-        errTimes.push(now);
-        errTimes = errTimes.filter(function (t) { return now - t < 15000; });
-        if (errTimes.length > 4) stopVoice('Voice keeps stopping (' + e.error + '). Tap Start to try again.');
+  // Sound is coming in, so it really is listening now
+  function gotAudio(s) {
+    if (s.audio) return;
+    s.audio = true;
+    vstatus(Date.now() - lastHeard > QUIET_MS ? QUIET : LISTENING);
+    quietWatch(s);
+  }
+
+  // No words for a while: swap in a fresh listener, in case this one quietly stopped working
+  function quietWatch(s) {
+    watch(s, QUIET_MS, function () {
+      closeSession();
+      vstatus(QUIET);
+      retryTimer = setTimeout(listen, 300);
+    });
+  }
+
+  function onVoiceResult(s, e) {
+    var last = '', lastFinal = false;
+    for (var i = 0; i < e.results.length; i++) {
+      var alt = e.results[i][0];
+      var tr = alt && alt.transcript || '';
+      last = tr; lastFinal = e.results[i].isFinal;
+      var m = matchCounts(tr);
+      var prev = s.counted[i] || (s.counted[i] = {});
+      Object.keys(m).forEach(function (id) {
+        var d = m[id] - (prev[id] || 0);
+        if (d > 0) { prev[id] = m[id]; addCount(id, d, 'voice'); }
+      });
+    }
+    last = last.trim();
+    if (!last) return;
+    // Words arrived, so the microphone and the recogniser are working
+    s.heard = s.audio = true;
+    fails = 0; woke = false;
+    lastHeard = Date.now();
+    quietWatch(s);
+    vstatus(LISTENING);
+    var none = lastFinal && !Object.keys(matchCounts(last)).length;
+    if (last.length > 90) last = '…' + last.slice(-90);
+    $('heard').textContent = 'Heard: “' + last + '”' + (none ? ' — not recognised' : '');
+  }
+
+  function onVoiceError(s, code) {
+    s.err = code;
+    if (code === 'not-allowed' || code === 'service-not-allowed') {
+      // Right after you come back to the app the phone can refuse for a moment, so if the
+      // microphone worked here before, treat it as a hiccup a couple of times first
+      if (!micOK || ++denials > 2) {
+        stopVoice(code === 'not-allowed'
+          ? 'Microphone access is blocked. Allow it in Settings, then tap Start.'
+          : 'Speech recognition isn’t available. Check that Dictation is on in Settings and you’re online, then tap Start.');
       }
-    };
+    } else if (code === 'language-not-supported') {
+      stopVoice('This phone can’t recognise the chosen language. Try the other one.');
+    }
+    // Any other error ends this listener; onVoiceEnd decides when to try again
+  }
 
-    r.onend = function () {
-      if (r !== rec || !listening) return;
-      if (document.hidden) { stopVoice('Voice stopped because you left the app. Tap Start to continue.'); return; }
-      setTimeout(function () {
-        if (listening && r === rec) launch();
-      }, 300);
-    };
+  function onVoiceEnd(s) {
+    clearTimeout(s.timer);
+    sess = null;
+    if (!voiceOn) return;
+    if (document.hidden) { pauseVoice(); return; }
+    // It heard words, or the microphone ran normally for a while: carry straight on
+    if (s.heard || s.err === 'no-speech' || (s.audio && Date.now() - s.t0 >= 5000)) {
+      fails = 0; woke = false;
+      retryTimer = setTimeout(listen, 250);
+    } else {
+      retry(s);
+    }
+  }
 
-    try { r.start(); }
-    catch (err) { stopVoice('Could not start the microphone. Tap Start to try again.'); }
+  // The listener stopped without hearing anything: try again, waiting a little longer each
+  // time (0.3s, 0.6s, 1.2s … up to 4s) so a busy microphone gets the chance to free up
+  function retry(s) {
+    if (!voiceOn) return;
+    if (document.hidden) { pauseVoice(); return; }
+    fails++;
+    if (fails >= MAX_FAILS) {
+      stopVoice(s.err === 'network'
+        ? 'Voice can’t connect. Check your internet connection, then tap Start.'
+        : 'Voice keeps getting cut off. Close other apps that use the microphone, then tap Start. Still not working? Close Tasbeeh fully and open it again.');
+      return;
+    }
+    vstatus(problem(s.err) + ' Trying again…');
+    if (fails === 3 && !woke && micOK) {
+      woke = true;
+      wakeMic(function (err) {
+        if (!voiceOn || awayAt || sess || document.hidden) return;
+        if (err === 'NotAllowedError') { stopVoice('Microphone access is blocked. Allow it in Settings, then tap Start.'); return; }
+        if (err === 'NotReadableError' || err === 'AbortError') vstatus('Another app may be using the microphone. Trying again…');
+        retryTimer = setTimeout(listen, 300);
+      });
+      return;
+    }
+    retryTimer = setTimeout(listen, Math.min(4000, 300 * Math.pow(2, fails - 1)));
+  }
+
+  function problem(err) {
+    if (err === 'network') return 'Voice lost its connection.';
+    if (err === 'audio-capture') return 'The microphone is busy or was interrupted.';
+    if (err === 'no-start' || err === 'no-audio' || err === 'start') return 'The microphone didn’t start.';
+    return 'Voice was interrupted.';
+  }
+
+  // Ask for the microphone directly for a moment. After another app has used it, this can
+  // wake it up again, and it tells us if something else is still holding on to it.
+  function wakeMic(done) {
+    var md = navigator.mediaDevices, called = false;
+    function finish(err) { if (!called) { called = true; done(err); } }
+    if (!md || !md.getUserMedia) { finish(''); return; }
+    setTimeout(function () { finish(''); }, 4000);
+    try {
+      md.getUserMedia({ audio: true }).then(function (stream) {
+        stream.getTracks().forEach(function (t) { t.stop(); });
+        finish('');
+      }, function (e) { finish(e && e.name || 'error'); });
+    } catch (e) { finish(''); }
+  }
+
+  // Leaving the app: the phone takes the microphone away, so stop cleanly and carry on later
+  function pauseVoice() {
+    if (!voiceOn) return;
+    if (!awayAt) awayAt = Date.now();
+    clearTimeout(retryTimer);
+    if (sess && sess.kind === 'count') closeSession();
+    keepAwake(false);
+    vstatus('Paused while you’re away. It carries on when you come back.');
+  }
+
+  function resumeVoice() {
+    if (!voiceOn || !awayAt || document.hidden) return;
+    if (Date.now() - awayAt > RESUME_WITHIN) {
+      stopVoice('Voice stopped while you were away. Tap Start to continue.');
+      return;
+    }
+    awayAt = 0;
+    fails = 0; denials = 0; woke = false;
+    lastHeard = Date.now();
+    keepAwake(true);
+    vstatus('Starting the microphone again…');
+    clearTimeout(retryTimer);
+    // Give the phone a moment to hand the microphone back before asking for it
+    retryTimer = setTimeout(listen, 800);
   }
 
   $('voiceBtn').addEventListener('click', function () {
-    if (listening) stopVoice(); else startVoice();
+    if (voiceOn) stopVoice(); else startVoice();
   });
 
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden && listening) stopVoice('Voice stopped because you left the app. Tap Start to continue.');
+    if (document.hidden) { cancelRecording(); pauseVoice(); }
+    else resumeVoice();
   });
+  window.addEventListener('pagehide', function () { cancelRecording(); pauseVoice(); });
+  window.addEventListener('pageshow', resumeVoice);
 
   // ---------- Record a voice word: listens once and saves what the phone heard ----------
-  var recOnce = null;
+  function cancelRecording() {
+    var s = sess;
+    if (!s || s.kind !== 'record') return;
+    closeSession();
+    s.btn.textContent = '🎙️ Record';
+  }
+
   function recordInto(input, btn) {
     if (!SR) { toast('Voice is not supported in this browser'); return; }
-    if (recOnce) { var o = recOnce; recOnce = null; try { o.abort(); } catch (e) {} btn.textContent = '🎙️ Record'; return; }
-    if (listening) stopVoice('Voice counting paused while recording a voice word. Tap Start to continue.');
-    var r = new SR(), got = false;
-    recOnce = r;
-    r.lang = state.lang || 'ar-SA';
-    r.continuous = false;
-    r.interimResults = false;
-    r.maxAlternatives = 1;
+    if (sess && sess.kind === 'record') { // tapped again while listening: cancel
+      var same = sess.btn === btn;
+      cancelRecording();
+      if (same) return;
+    }
+    if (voiceOn) stopVoice('Voice counting paused while recording a voice word. Tap Start to continue.');
+    var s = { kind: 'record', btn: btn, got: false, err: '' };
+    sess = s;
     btn.textContent = 'Listening…';
-    r.onresult = function (e) {
-      var tr = (e.results[0] && e.results[0][0].transcript || '').trim();
-      if (!tr) return;
-      got = true;
-      var words = parseWords(input.value);
-      if (words.map(norm).indexOf(norm(tr)) === -1) words.push(tr);
-      input.value = words.join(', ');
-      input.dispatchEvent(new Event('input'));
-      toast('Saved voice word: “' + tr + '”');
-    };
-    r.onerror = function (e) {
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('Microphone access is blocked. Allow it in Settings.');
-    };
-    r.onend = function () {
-      btn.textContent = '🎙️ Record';
-      if (recOnce !== r) return; // cancelled
-      recOnce = null;
-      if (!got) toast('Didn’t catch that. Tap Record and say it once more.');
-    };
-    try { r.start(); }
-    catch (err) { recOnce = null; btn.textContent = '🎙️ Record'; toast('Could not start the microphone'); }
+    whenIdle(function () {
+      if (sess !== s) return;
+      try {
+        openRec(s, false, false, {
+          result: function (e) {
+            var res = e.results[0], tr = (res && res[0] && res[0].transcript || '').trim();
+            if (!tr || s.got) return;
+            s.got = true;
+            var words = parseWords(input.value);
+            if (words.map(norm).indexOf(norm(tr)) === -1) words.push(tr);
+            input.value = words.join(', ');
+            input.dispatchEvent(new Event('input'));
+            toast('Saved voice word: “' + tr + '”');
+          },
+          error: function (code) { s.err = code; },
+          end: function () { finishRecording(s); }
+        });
+      } catch (err) {
+        sess = null;
+        btn.textContent = '🎙️ Record';
+        toast('Could not start the microphone. Try again.');
+        return;
+      }
+      // Stop after 10 seconds and keep what was heard; if it hangs, give up 3 seconds later
+      watch(s, 10000, function () {
+        try { s.r.stop(); } catch (e) {}
+        watch(s, 3000, function () { closeSession(); finishRecording(s); });
+      });
+    });
+  }
+
+  function finishRecording(s) {
+    clearTimeout(s.timer);
+    if (sess === s) sess = null;
+    s.btn.textContent = '🎙️ Record';
+    if (s.got) return;
+    var e = s.err;
+    toast(e === 'not-allowed' || e === 'service-not-allowed' ? 'Microphone access is blocked. Allow it in Settings.'
+      : e === 'audio-capture' ? 'The microphone is busy. Close other apps using it and try again.'
+      : e === 'network' ? 'Voice can’t connect. Check your internet and try again.'
+      : 'Didn’t catch that. Tap Record and say it once more.');
   }
 
   // ---------- Backup and restore ----------
@@ -915,7 +1167,7 @@ input::placeholder,textarea::placeholder{color:#62706a}
   });
 
   function applyState(next) {
-    if (listening) stopVoice();
+    if (voiceOn) stopVoice();
     state = next;
     hist = [];
     save();
