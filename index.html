@@ -4,6 +4,7 @@
   1. Never change the storage name: tasbeeh-data-v4
   2. Only ADD new saved fields. Never rename or remove existing ones
      (items, deleted, lang, lastBackup, place, presetsOffered,
+      supporter, theme, days, supportAskedAt,
       id, name, target, count, words, schedule, round, pastCount, lastAt, preset).
   3. Never reset or overwrite counts when the page loads. The one exception: a dhikr
      the user set to start again (after every prayer / every day) begins a new round
@@ -27,8 +28,14 @@
   --bg:#0a1311;--card:#13231f;--card2:#1a2f29;--line:rgba(217,180,108,.16);
   --text:#ece6d6;--muted:#9aa89f;--gold:#d9b46c;--gold2:#f1d396;
   --green:#3cc595;--green2:#1f8f69;--red:#e05a63;
+  --glow:#16362e;--press:#1f3832;--field:#0c1714;--hint:#62706a;--bar:#b78a2c;
   color-scheme:dark
 }
+/* Supporter themes: the gold stays, the background family changes */
+html[data-theme="midnight"]{--bg:#0a0f1d;--card:#121a2e;--card2:#19233c;--glow:#1a2850;--press:#202b4a;--field:#0b1122;--hint:#5f6984;--muted:#9ba3b6}
+html[data-theme="maroon"]{--bg:#150a0d;--card:#241318;--card2:#2e1920;--glow:#3e1b25;--press:#3a1f27;--field:#160b0f;--hint:#7b6066;--muted:#b49ea3}
+html[data-theme="violet"]{--bg:#100b18;--card:#1b1428;--card2:#231a34;--glow:#2d2049;--press:#2b2142;--field:#110c1a;--hint:#6d6487;--muted:#aaa2be}
+html[data-theme="black"]{--bg:#000;--card:#0c0c0c;--card2:#151515;--glow:#000;--press:#1d1d1d;--field:#050505;--hint:#5d5d5d;--muted:#9b9b9b}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 [hidden]{display:none!important}
 html{background:var(--bg)}
@@ -36,7 +43,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
   background:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cg fill='none' stroke='%23d9b46c' stroke-opacity='.06'%3E%3Crect x='20' y='20' width='24' height='24'/%3E%3Crect x='20' y='20' width='24' height='24' transform='rotate(45 32 32)'/%3E%3C/g%3E%3C/svg%3E"),
-    radial-gradient(ellipse at 50% -10%,#16362e 0%,rgba(10,19,17,0) 60%),var(--bg)}
+    radial-gradient(ellipse at 50% -10%,var(--glow) 0%,transparent 60%),var(--bg)}
 header{padding:calc(env(safe-area-inset-top) + 18px) 16px 6px;text-align:center}
 header .ar{font-size:34px;color:var(--gold);line-height:1.2;font-family:"Geeza Pro","Noto Naskh Arabic","Amiri",serif}
 header h1{margin:2px 0 0;font-size:13px;font-weight:600;letter-spacing:.35em;text-transform:uppercase;color:var(--muted)}
@@ -49,7 +56,7 @@ h3{margin:18px 0 6px;font-size:16px;color:var(--gold2)}
 p{line-height:1.5}
 .panel{background:linear-gradient(160deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
 .tap{display:block;width:100%;text-align:left;background:linear-gradient(160deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:18px;padding:16px;margin:0 0 12px;font:inherit;color:inherit;touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;min-height:130px}
-.tap:active{transform:scale(.985);background:#1f3832}
+.tap:active{transform:scale(.985);background:var(--press)}
 .tap .name{font-size:18px;font-weight:600}
 .tap .count{font-size:46px;font-weight:700;color:var(--gold2);font-variant-numeric:tabular-nums;margin:4px 0}
 .tap .of{font-size:13px;color:var(--muted)}
@@ -80,8 +87,8 @@ p{line-height:1.5}
 .row{display:flex;gap:8px;align-items:center}
 label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
 textarea{min-height:110px;resize:vertical;font-size:14px}
-input,select,textarea{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:16px;background:#0c1714;color:var(--text)}
-input::placeholder,textarea::placeholder{color:#62706a}
+input,select,textarea{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:16px;background:var(--field);color:var(--text)}
+input::placeholder,textarea::placeholder{color:var(--hint)}
 .hold{position:relative;overflow:hidden;width:100%;touch-action:none;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
 .hold .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(224,90,99,.35)}
 .hold .lbl{position:relative}
@@ -95,15 +102,63 @@ input::placeholder,textarea::placeholder{color:#62706a}
 .modal h3{margin-top:0}
 #toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#f1e7cf;color:#1b1407;padding:10px 16px;border-radius:20px;font-size:14px;font-weight:500;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20;max-width:90%;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.4)}
 #toast.show{opacity:1}
+.badge{display:inline-block;margin-top:6px;padding:2px 10px;border:1px solid var(--line);border-radius:999px;font-size:12px;color:var(--gold2)}
+.perks{margin:8px 0 12px;padding-left:20px;font-size:14px;line-height:1.5}
+.perks li{margin:4px 0}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.kpi{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:12px;padding:10px}
+.kpi .k{font-size:12px;color:var(--muted)}
+.kpi .v{font-size:22px;font-weight:600;margin-top:2px}
+.kpi .s{font-size:11px;color:var(--muted)}
+.readout{font-size:13px;color:var(--muted);margin-top:14px;min-height:19px}
+.readout b{color:var(--text)}
+.plot{position:relative;display:flex;align-items:flex-end;height:110px;margin-top:20px;border-bottom:1px solid rgba(255,255,255,.14)}
+.gline{position:absolute;left:0;right:0;top:0;border-top:1px solid rgba(255,255,255,.07)}
+.gline span{position:absolute;right:0;bottom:2px;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.col{flex:1;height:100%;display:flex;align-items:flex-end;justify-content:center;border:0;background:none;padding:0 1px;font:inherit}
+.col .b{width:100%;max-width:24px;background:var(--bar);border-radius:4px 4px 0 0}
+.col:hover .b,.col:focus-visible .b,.col.sel .b{background:var(--gold2)}
+.col:focus-visible{outline:1px solid var(--gold2);outline-offset:1px}
+.axis{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px}
+.days{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+.days td{padding:5px 0;border-top:1px solid var(--line)}
+.days td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+.swatches{display:flex;gap:8px;flex-wrap:wrap}
+.sw{width:60px;border:0;background:none;color:var(--muted);font:inherit;font-size:12px;padding:0;text-align:center}
+.sw i{display:block;width:44px;height:44px;margin:0 auto 4px;border-radius:50%;border:2px solid var(--line)}
+.sw.on{color:var(--text)}
+.sw.on i{border-color:var(--gold2);box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--gold2)}
+.nudge .row{margin-top:10px}
+.focus{position:fixed;inset:0;z-index:15;background:var(--bg);display:flex;flex-direction:column;padding:calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 16px);touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.focus .fx{align-self:flex-end;padding:10px 14px}
+.focus .fbody{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:4px}
+.focus .fname{font-size:22px;font-weight:600}
+.focus .far{font-family:"Geeza Pro","Noto Naskh Arabic","Amiri",serif;font-size:26px;line-height:1.6;color:var(--gold)}
+.focus .fcount{font-size:104px;font-weight:700;line-height:1.05;color:var(--gold2)}
+.focus.done .fcount{color:var(--green)}
+.focus .fcount.pop{animation:pop .16s ease-out}
+@keyframes pop{from{transform:scale(1.07)}to{transform:none}}
+.focus .fof{font-size:15px;color:var(--muted)}
+.focus .bar{width:min(320px,80%)}
+.focus .fhint{margin-top:18px}
+#focus:not([hidden]) ~ #toast{bottom:calc(env(safe-area-inset-bottom) + 92px)}
 </style>
+<script>
+  // Put the chosen theme on before the page draws, so it doesn't flash the default colours
+  try {
+    var t = JSON.parse(localStorage.getItem('tasbeeh-data-v4'));
+    if (t && t.supporter && t.theme) document.documentElement.setAttribute('data-theme', t.theme);
+  } catch (e) {}
+</script>
 </head>
 <body>
 <header>
   <div class="ar">تسبيح</div>
   <h1>Tasbeeh</h1>
+  <div class="badge" id="badge" hidden>⭐ Supporter</div>
   <nav class="tabs">
     <button id="tabCounter" class="on">📿 Counter</button>
-    <button id="tabFeedback">💬 Feedback</button>
+    <button id="tabFeedback">💚 Support</button>
   </nav>
 </header>
 
@@ -123,6 +178,7 @@ input::placeholder,textarea::placeholder{color:#62706a}
   </div>
 
   <div id="list"></div>
+  <div id="nudge"></div>
 
   <div class="panel">
     <div class="small" id="lastAction">Nothing to undo yet.</div>
@@ -175,9 +231,54 @@ input::placeholder,textarea::placeholder{color:#62706a}
     <button class="btn secondary wide" id="restoreBtn" style="margin-top:10px">Restore from backup</button>
     <button class="btn secondary wide" id="undoRestore" style="margin-top:10px" hidden>↩︎ Undo last restore</button>
   </div>
+
+  <button class="btn secondary wide" id="extrasBtn" style="margin-top:12px">⭐ Supporter extras</button>
+
+  <div class="panel" id="extrasPanel" hidden style="margin-top:12px">
+    <div id="extrasLocked">
+      <h3 style="margin-top:0">⭐ Supporter extras</h3>
+      <div class="small">A thank-you for supporting Tasbeeh. Every dhikr feature stays free for everyone.</div>
+      <ul class="perks">
+        <li>📈 <b>Progress</b>: your daily totals for the last 30 days and your streak</li>
+        <li>⛶ <b>Focus mode</b>: one dhikr on the whole screen, tap anywhere to count</li>
+        <li>🎨 <b>Themes</b>: Midnight, Maroon, Violet and Black</li>
+      </ul>
+      <button class="btn wide" data-how>💚 How to unlock</button>
+    </div>
+    <div id="extrasOpen" hidden>
+      <h3 style="margin-top:0">📈 Progress</h3>
+      <div id="progress"></div>
+      <h3>⛶ Focus mode</h3>
+      <div class="small">One dhikr on the whole screen. Tap anywhere to count.</div>
+      <div class="row" style="margin-top:8px">
+        <select id="focusPick" aria-label="Dhikr for focus mode"></select>
+        <button class="btn" id="focusGo" style="white-space:nowrap">Start</button>
+      </div>
+      <h3>🎨 Theme</h3>
+      <div class="swatches" id="themes"></div>
+    </div>
+  </div>
 </section>
 
 <section id="feedbackView" hidden>
+  <div class="panel" id="supportCard">
+    <h2>💚 Support Tasbeeh</h2>
+    <p class="small">Tasbeeh is free, with no ads, and every dhikr feature stays free for everyone. If it benefits you, please support it. Monthly support helps most, because it lets us keep improving Tasbeeh.</p>
+    <a class="btn wide" id="supportBtn" target="_blank" rel="noopener">💚 Support Tasbeeh</a>
+    <div class="small" id="supportSoon" hidden>Ways to support are coming soon, in shā’ Allāh.</div>
+    <p class="small">As a thank-you, supporters get ⭐ extras: progress and streaks, focus mode, and themes.</p>
+    <div id="codeBox">
+      <label for="codeIn">Have a supporter code?</label>
+      <div class="row">
+        <input id="codeIn" placeholder="TASBEEH-XXXX-XXXX" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false">
+        <button class="btn secondary" id="codeBtn">Unlock</button>
+      </div>
+      <button class="linkbtn" id="freeBtn" style="margin-top:12px">Can’t afford it right now? Unlock the extras for free.</button>
+    </div>
+    <div class="small" id="supporterNote" hidden>⭐ Your extras are unlocked. JazakAllahu khayran for supporting Tasbeeh!</div>
+    <p class="small" style="margin-bottom:0">Tasbeeh isn’t a registered charity, so please don’t give zakat here.</p>
+  </div>
+
   <div class="panel">
     <h2>Feedback &amp; updates</h2>
     <p class="small" style="margin:0">Tasbeeh is free, with no ads. Your ideas help it keep getting better.</p>
@@ -222,6 +323,19 @@ input::placeholder,textarea::placeholder{color:#62706a}
 </section>
 </main>
 
+<div class="focus" id="focus" hidden>
+  <button class="btn secondary fx" id="focusClose">✕ Close</button>
+  <div class="fbody">
+    <div class="fname" id="fName"></div>
+    <div class="far" id="fAr" lang="ar" dir="rtl"></div>
+    <div class="fcount" id="fCount"></div>
+    <div class="fof" id="fOf"></div>
+    <div class="bar"><span id="fBar"></span></div>
+    <div class="small fhint">Tap anywhere to count</div>
+  </div>
+  <button class="btn secondary hold" id="focusUndo"><span class="fill"></span><span class="lbl">Press and hold to undo</span></button>
+</div>
+
 <div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
 <div id="toast"></div>
 
@@ -237,6 +351,18 @@ input::placeholder,textarea::placeholder{color:#62706a}
   var COMMUNITY_LINK = 'https://chat.whatsapp.com/KPmp9saUdBF8mX85M5tbaH';
   // Your Suggestions group invite link (used when no WhatsApp number is set)
   var SUGGESTIONS_LINK = 'https://chat.whatsapp.com/Fe5yEfq0w6DFNrKllSjxu3';
+
+  // Your support page, where people can give monthly or once (Ko-fi, Buy Me a Coffee, Patreon,
+  // Gumroad…), e.g. 'https://ko-fi.com/yourname'. The Support button shows once this is set.
+  var SUPPORT_LINK = '';
+  // Supporter codes unlock the extras. Put the code itself in your support page's thank-you
+  // message; only its fingerprint goes here, so nobody can read the code from this public file.
+  // To add a new code: write it in CAPITALS with no spaces or dashes, put it through any
+  // SHA-256 generator, and add the result to this list. Keep old ones so earlier supporters
+  // stay unlocked.
+  var SUPPORTER_CODES = ['d1bd69539238e8922a2e31a308d4c816045c8c413ffc3e32adf23de0be1643cf'];
+  // true: anyone who can't afford to support can unlock the extras for free, no questions asked
+  var FREE_FOR_THOSE_IN_NEED = true;
   // ============================================
 
   var KEY = 'tasbeeh-data-v4';
@@ -624,6 +750,9 @@ input::placeholder,textarea::placeholder{color:#62706a}
     $('list').innerHTML = html;
     renderUndo();
     renderManage();
+    renderNudge();
+    renderExtras();
+    renderFocus();
   }
 
   function cardHtml(it) {
@@ -715,7 +844,10 @@ input::placeholder,textarea::placeholder{color:#62706a}
     if (add <= 0) { if (src === 'tap') toast(it.name + ' is already complete'); return 0; }
     it.count += add;
     it.lastAt = Date.now();
-    hist.push({ id: id, n: add });
+    var day = ymd(new Date());
+    if (!state.days || typeof state.days !== 'object') state.days = {};
+    state.days[day] = (state.days[day] || 0) + add; // the day's total, for Progress
+    hist.push({ id: id, n: add, day: day });
     if (hist.length > 300) hist.shift();
     save();
     render();
@@ -754,6 +886,7 @@ input::placeholder,textarea::placeholder{color:#62706a}
       var it = find(h.id);
       if (!it) continue;
       it.count = Math.max(0, it.count - h.n);
+      if (h.day && state.days && state.days[h.day]) state.days[h.day] = Math.max(0, state.days[h.day] - h.n);
       save();
       render();
       toast('Undone: −' + h.n + ' ' + it.name + ' (now ' + fmt(it.count) + ')');
@@ -1448,6 +1581,18 @@ input::placeholder,textarea::placeholder{color:#62706a}
     var p = d.place, lat = p && Number(p.lat), lng = p && Number(p.lng);
     if (p && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) out.place = { lat: lat, lng: lng };
     if (d.presetsOffered) out.presetsOffered = true;
+    if (d.supporter && Number(d.supporter.since) > 0) {
+      out.supporter = { since: Number(d.supporter.since), via: d.supporter.via === 'code' ? 'code' : 'free' };
+    }
+    if (typeof d.theme === 'string') out.theme = d.theme;
+    if (d.days && typeof d.days === 'object') {
+      out.days = {};
+      Object.keys(d.days).forEach(function (k) {
+        var n = Math.floor(Number(d.days[k]));
+        if (/^\d{4}-\d{2}-\d{2}$/.test(k) && n > 0) out.days[k] = n;
+      });
+    }
+    if (Number(d.supportAskedAt) > 0) out.supportAskedAt = Number(d.supportAskedAt);
     return out;
   }
 
@@ -1520,6 +1665,7 @@ input::placeholder,textarea::placeholder{color:#62706a}
     state = next;
     hist = [];
     rollover();
+    applyTheme();
     save();
     $('lang').value = state.lang;
     render();
@@ -1610,8 +1756,250 @@ input::placeholder,textarea::placeholder{color:#62706a}
     }
   });
 
+  // ---------- Support and supporter extras ----------
+  // Every dhikr feature stays free. Supporters get a few extras as a thank-you: Progress,
+  // Focus mode and Themes. A supporter code (from the support page's thank-you message)
+  // unlocks them, and anyone who can't afford it can unlock them free, on trust.
+  var DAY_MS = 86400000;
+  var THEMES = [['emerald', 'Emerald', '#0a1311', '#1a2f29'], ['midnight', 'Midnight', '#0a0f1d', '#19233c'],
+    ['maroon', 'Maroon', '#150a0d', '#2e1920'], ['violet', 'Violet', '#100b18', '#231a34'], ['black', 'Black', '#000000', '#151515']];
+  var focusId = null, focusShown = -1, showTable = false, pickSig = '', lastStats = null;
+
+  function isSupporter() { return !!(state.supporter && state.supporter.since); }
+
+  function applyTheme() {
+    var t = (isSupporter() && THEMES.find(function (x) { return x[0] === state.theme; })) || THEMES[0];
+    document.documentElement.setAttribute('data-theme', t[0]);
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', t[2]);
+  }
+
+  function renderSupport() {
+    var sup = isSupporter(), paid = sup && state.supporter.via === 'code';
+    $('supportBtn').hidden = !SUPPORT_LINK;
+    if (SUPPORT_LINK) $('supportBtn').href = SUPPORT_LINK;
+    $('supportSoon').hidden = !!SUPPORT_LINK;
+    $('codeBox').hidden = paid;
+    $('freeBtn').hidden = sup || !FREE_FOR_THOSE_IN_NEED;
+    $('supporterNote').hidden = !sup;
+    $('supporterNote').textContent = paid
+      ? '⭐ Your extras are unlocked. JazakAllahu khayran for supporting Tasbeeh!'
+      : '⭐ Your extras are unlocked. If things get easier, please consider supporting Tasbeeh.';
+    $('badge').hidden = !paid;
+    $('extrasLocked').hidden = sup;
+    $('extrasOpen').hidden = !sup;
+  }
+
+  function unlock(via) {
+    state.supporter = { since: (state.supporter && state.supporter.since) || Date.now(), via: via };
+    save();
+    applyTheme();
+    render();
+    toast(via === 'code' ? 'JazakAllahu khayran! Your supporter extras are unlocked ⭐' : 'Extras unlocked. May Allah make things easy for you.');
+  }
+
+  function sha256hex(text) {
+    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)).then(function (buf) {
+      return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+    });
+  }
+
+  // Codes are checked by their fingerprint: capitals and digits only, so dashes and spaces don't matter
+  function tryCode() {
+    var code = $('codeIn').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!code) { toast('Please type your supporter code'); return; }
+    if (!window.crypto || !crypto.subtle) { toast('This browser can’t check codes. Please update it and try again.'); return; }
+    sha256hex(code).then(function (h) {
+      var ok = SUPPORTER_CODES.some(function (c) { return String(c).trim().toLowerCase() === h; });
+      if (!ok) { toast('That code isn’t right. Please check it and try again.'); return; }
+      $('codeIn').value = '';
+      unlock('code');
+    }, function () { toast('Couldn’t check the code. Please try again.'); });
+  }
+
+  $('codeBtn').addEventListener('click', tryCode);
+  $('codeIn').addEventListener('keydown', function (e) { if (e.key === 'Enter') tryCode(); });
+  $('freeBtn').addEventListener('click', function () {
+    if (!confirm('Unlock the supporter extras for free?\n\nThis is for anyone who can’t afford to support right now. No questions asked.')) return;
+    unlock('free');
+  });
+
+  // A gentle reminder: only after a week of use, never for supporters, at most every 60 days
+  function renderNudge() {
+    var days = state.days || {};
+    var active = Object.keys(days).filter(function (k) { return days[k] > 0; }).length;
+    var show = !isSupporter() && !!SUPPORT_LINK && active >= 7 && !(state.supportAskedAt > Date.now() - 60 * DAY_MS);
+    $('nudge').innerHTML = !show ? '' : '<div class="panel nudge"><b>💚 Is Tasbeeh helping you?</b>' +
+      '<div class="small" style="margin-top:4px">It’s free and ad-free. If you’re able to, please support it. Even a little each month keeps it going.</div>' +
+      '<div class="row"><button class="btn" data-nudge="yes" style="flex:1">Support Tasbeeh</button>' +
+      '<button class="btn secondary" data-nudge="no" style="flex:1">Not now</button></div></div>';
+  }
+  $('nudge').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-nudge]');
+    if (!b) return;
+    state.supportAskedAt = Date.now();
+    save();
+    renderNudge();
+    if (b.dataset.nudge === 'yes') showView('feedback');
+  });
+
+  // ----- Extras panel -----
+  function renderExtras() {
+    renderSupport();
+    var sup = isSupporter(), st = sup ? progressStats() : null;
+    $('extrasBtn').textContent = !sup ? '⭐ Supporter extras'
+      : '⭐ Extras' + (st.streak > 1 ? ' · 🔥 ' + st.streak + '-day streak' : '');
+    if (!sup || $('extrasPanel').hidden) return;
+    renderProgress(st);
+    renderFocusPick();
+    renderThemes();
+  }
+
+  $('extrasBtn').addEventListener('click', function () {
+    var p = $('extrasPanel');
+    p.hidden = !p.hidden;
+    renderExtras();
+  });
+
+  $('extrasPanel').addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    if (b.hasAttribute('data-how')) showView('feedback');
+    else if (b.dataset.pick) { state.theme = b.dataset.pick; save(); applyTheme(); renderThemes(); }
+    else if (b.id === 'focusGo') openFocus($('focusPick').value);
+    else if (b.id === 'tableToggle') { showTable = !showTable; renderProgress(); }
+    else if (b.classList.contains('col')) showDay(+b.dataset.i);
+  });
+
+  function renderThemes() {
+    var cur = THEMES.some(function (t) { return t[0] === state.theme; }) ? state.theme : 'emerald';
+    $('themes').innerHTML = THEMES.map(function (t) {
+      return '<button class="sw' + (t[0] === cur ? ' on' : '') + '" data-pick="' + t[0] + '" aria-pressed="' + (t[0] === cur) + '">' +
+        '<i style="background:linear-gradient(160deg,' + t[3] + ',' + t[2] + ')"></i>' + t[1] + '</button>';
+    }).join('');
+  }
+
+  function renderFocusPick() {
+    var sig = state.items.map(function (it) { return it.id + ':' + it.name; }).join('|');
+    if (sig === pickSig) return;
+    pickSig = sig;
+    var sel = $('focusPick').value;
+    $('focusPick').innerHTML = state.items.map(function (it) {
+      return '<option value="' + it.id + '">' + esc(it.name) + '</option>';
+    }).join('');
+    if (sel && find(sel)) $('focusPick').value = sel;
+    $('focusGo').disabled = !state.items.length;
+  }
+
+  // ----- Progress: the day's totals are kept in state.days on this phone -----
+  function parseDay(k) { var p = k.split('-'); return new Date(+p[0], p[1] - 1, +p[2]); }
+  function dayLabel(d) { return d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }); }
+
+  function progressStats() {
+    var days = state.days || {}, now = new Date(), last = [], week = 0;
+    for (var i = 29; i >= 0; i--) {
+      var d = shiftDay(now, -i), n = days[ymd(d)] || 0;
+      last.push({ date: d, n: n });
+      if (i < 7) week += n;
+    }
+    // Days in a row with any count; today still counts until it ends
+    var streak = 0, s = days[ymd(now)] > 0 ? now : shiftDay(now, -1);
+    while (days[ymd(s)] > 0) { streak++; s = shiftDay(s, -1); }
+    var best = 0, run = 0, prev = null;
+    Object.keys(days).filter(function (k) { return days[k] > 0; }).sort().forEach(function (k) {
+      run = prev && ymd(shiftDay(parseDay(prev), 1)) === k ? run + 1 : 1;
+      if (run > best) best = run;
+      prev = k;
+    });
+    return { today: days[ymd(now)] || 0, week: week, streak: streak, best: best, last: last };
+  }
+
+  // Round the chart's top line up to a clean number (…, 500, 600, 800, 1,000, 1,200, …)
+  function niceTop(v) {
+    var p = Math.pow(10, Math.floor(Math.log10(v))), m = v / p;
+    var step = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find(function (s) { return m <= s + 1e-9; });
+    return Math.round(step * p * 100) / 100;
+  }
+
+  function renderProgress(st) {
+    st = lastStats = st || progressStats();
+    function kpi(label, value, sub) {
+      return '<div class="kpi"><div class="k">' + label + '</div><div class="v">' + value + '</div>' +
+        (sub ? '<div class="s">' + sub + '</div>' : '') + '</div>';
+    }
+    var max = Math.max.apply(null, st.last.map(function (x) { return x.n; }));
+    var html = '<div class="kpis">' + kpi('Today', fmt(st.today)) + kpi('Last 7 days', fmt(st.week)) +
+      kpi('Streak', st.streak + (st.streak === 1 ? ' day' : ' days'), st.best > st.streak ? 'best ' + st.best : '') + '</div>';
+    if (!max) {
+      html += '<div class="small" style="margin-top:12px">Your daily totals for the last 30 days will show here as you count.</div>';
+    } else {
+      var top = niceTop(max);
+      html += '<div class="readout" id="readout" aria-live="polite">Daily totals, last 30 days. Tap a day to see it.</div>' +
+        '<div class="plot" role="group" aria-label="Daily totals for the last 30 days">' +
+        '<div class="gline"><span>' + fmt(top) + '</span></div>' +
+        st.last.map(function (x, i) {
+          var h = x.n ? Math.max(2, Math.round(x.n / top * 100)) : 0;
+          return '<button class="col" data-i="' + i + '" aria-label="' + dayLabel(x.date) + ': ' + fmt(x.n) + '">' +
+            '<span class="b" style="height:' + h + '%"></span></button>';
+        }).join('') + '</div>' +
+        '<div class="axis"><span>' + st.last[0].date.toLocaleDateString([], { day: 'numeric', month: 'short' }) + '</span><span>Today</span></div>' +
+        '<button class="linkbtn" id="tableToggle" style="margin-top:10px">' + (showTable ? 'Hide the list' : 'Show as a list') + '</button>' +
+        (showTable ? '<table class="days">' + st.last.slice().reverse().map(function (x) {
+          return '<tr><td>' + dayLabel(x.date) + '</td><td>' + fmt(x.n) + '</td></tr>';
+        }).join('') + '</table>' : '');
+    }
+    $('progress').innerHTML = html;
+  }
+
+  // The chart's readout: the value first, then the day
+  function showDay(i) {
+    var x = lastStats && lastStats.last[i];
+    if (!x || !$('readout')) return;
+    $('readout').innerHTML = '<b>' + fmt(x.n) + '</b> · ' + dayLabel(x.date);
+    Array.prototype.forEach.call(document.querySelectorAll('#progress .col'), function (c) {
+      c.classList.toggle('sel', c.getAttribute('data-i') === String(i));
+    });
+  }
+  ['pointerover', 'focusin'].forEach(function (ev) {
+    $('progress').addEventListener(ev, function (e) {
+      var c = e.target.closest('.col');
+      if (c) showDay(+c.getAttribute('data-i'));
+    });
+  });
+
+  // ----- Focus mode: one dhikr on the whole screen, tap anywhere to count -----
+  function openFocus(id) {
+    if (!find(id)) return;
+    focusId = id;
+    focusShown = -1;
+    $('focus').hidden = false;
+    renderFocus();
+  }
+  function closeFocus() { focusId = null; $('focus').hidden = true; }
+  function renderFocus() {
+    if (!focusId) return;
+    var it = find(focusId);
+    if (!it) { closeFocus(); return; }
+    var done = it.count >= it.target, p = presetOf(it), fc = $('fCount');
+    $('fName').textContent = it.name;
+    $('fAr').textContent = p ? p.ar : '';
+    fc.textContent = fmt(it.count);
+    $('fOf').textContent = done ? doneText(it) : 'of ' + fmt(it.target) + ' · ' + fmt(it.target - it.count) + ' left';
+    $('fBar').style.width = Math.min(100, it.count / it.target * 100).toFixed(2) + '%';
+    $('focus').classList.toggle('done', done);
+    if (focusShown !== -1 && it.count !== focusShown) { fc.classList.remove('pop'); void fc.offsetWidth; fc.classList.add('pop'); }
+    focusShown = it.count;
+  }
+  $('focus').addEventListener('click', function (e) {
+    if (focusId && !e.target.closest('button')) tapCard(focusId);
+  });
+  $('focusClose').addEventListener('click', closeFocus);
+  holdToActivate($('focusUndo'), 1200, undo);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && focusId) closeFocus(); });
+
   // ---------- Start ----------
   rollover();
+  applyTheme();
   renderBackup();
   render();
   if (migrated) toast('Your earlier counts were loaded ✓');
