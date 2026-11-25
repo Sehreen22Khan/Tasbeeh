@@ -10,6 +10,8 @@
      the user set to start again (after every prayer / every day) begins a new round
      when its time comes, and the finished round is added to its pastCount.
   4. Never rename the GitHub username or the Tasbeeh repo.
+  5. Change APP_VERSION (today's date) with every update, so people can see which
+     version they have. "Check for updates" spots any change even if this is forgotten.
 -->
 <html lang="en">
 <head>
@@ -128,7 +130,8 @@ input::placeholder,textarea::placeholder{color:var(--hint)}
 .sw i{display:block;width:44px;height:44px;margin:0 auto 4px;border-radius:50%;border:2px solid var(--line)}
 .sw.on{color:var(--text)}
 .sw.on i{border-color:var(--gold2);box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--gold2)}
-.nudge .row{margin-top:10px}
+.nudge .row,.update .row{margin-top:10px}
+.update{border-color:rgba(241,211,150,.5)}
 .focus{position:fixed;inset:0;z-index:15;background:var(--bg);display:flex;flex-direction:column;padding:calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 16px);touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .focus .fx{align-self:flex-end;padding:10px 14px}
 .focus .fbody{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:4px}
@@ -164,6 +167,15 @@ input::placeholder,textarea::placeholder{color:var(--hint)}
 
 <main>
 <section id="counterView">
+  <div class="panel update" id="updateBar" hidden>
+    <b>✨ A new version of Tasbeeh is ready</b>
+    <div class="small" style="margin-top:4px">Your counts are kept safe. It only takes a moment.</div>
+    <div class="row">
+      <button class="btn" id="updateNow" style="flex:1">Update now</button>
+      <button class="btn secondary" id="updateLater" style="flex:1">Later</button>
+    </div>
+  </div>
+
   <div class="panel">
     <div class="row">
       <strong style="flex:1">🎙️ Voice counting</strong>
@@ -282,6 +294,11 @@ input::placeholder,textarea::placeholder{color:var(--hint)}
   <div class="panel">
     <h2>Feedback &amp; updates</h2>
     <p class="small" style="margin:0">Tasbeeh is free, with no ads. Your ideas help it keep getting better.</p>
+    <div class="row" style="margin-top:12px">
+      <span class="small" id="versionLine" style="flex:1"></span>
+      <button class="btn secondary" id="checkUpdates" style="white-space:nowrap">🔄 Check for updates</button>
+    </div>
+    <div class="small" id="updateStatus" style="margin-top:8px" aria-live="polite"></div>
   </div>
 
   <div class="panel" id="suggestCard">
@@ -364,6 +381,13 @@ input::placeholder,textarea::placeholder{color:var(--hint)}
   // true: anyone who can't afford to support can unlock the extras for free, no questions asked
   var FREE_FOR_THOSE_IN_NEED = true;
   // ============================================
+
+  var APP_VERSION = '2026-11-25'; // change with every update (see rule 5 at the top)
+  // Exactly what this copy of the app runs, so "Check for updates" can tell when a newer one is online
+  var BUILT = {
+    script: (document.currentScript && document.currentScript.textContent) || '',
+    style: (document.querySelector('style') || {}).textContent || ''
+  };
 
   var KEY = 'tasbeeh-data-v4';
   var DEFAULT_TARGET = 200000;
@@ -1997,12 +2021,77 @@ input::placeholder,textarea::placeholder{color:var(--hint)}
   holdToActivate($('focusUndo'), 1200, undo);
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && focusId) closeFocus(); });
 
+  // ---------- Updates ----------
+  // A phone keeps running the copy it opened (a home-screen app can stay open for days), so
+  // the app checks for a newer copy: soon after opening, when you come back to it (at most
+  // once an hour), and when you tap "Check for updates". Any change to the app counts.
+  var lastCheck = 0, checking = false, updateLater = false;
+
+  // true when the copy online differs from the one running here
+  function newerOnline() {
+    return fetch(location.pathname + '?check=' + Date.now(), { cache: 'no-store' }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    }).then(function (html) {
+      var doc = new DOMParser().parseFromString(html, 'text/html');
+      var scripts = doc.querySelectorAll('script'), main = scripts[scripts.length - 1], style = doc.querySelector('style');
+      // Wi-Fi sign-in pages and errors aren't Tasbeeh; don't call those an update
+      if (!main || main.textContent.indexOf("'tasbeeh-data-v4'") === -1) throw new Error('not Tasbeeh');
+      return main.textContent !== BUILT.script || (style ? style.textContent : '') !== BUILT.style;
+    });
+  }
+
+  function checkForUpdates(byHand) {
+    if (checking) return;
+    checking = true;
+    lastCheck = Date.now();
+    if (byHand) { $('checkUpdates').disabled = true; $('updateStatus').textContent = 'Checking…'; }
+    newerOnline().then(function (newer) {
+      if (newer && !updateLater) $('updateBar').hidden = false;
+      if (byHand) {
+        $('updateStatus').innerHTML = newer
+          ? '✨ A new version is ready. <button class="linkbtn" data-update>Update now</button>'
+          : '✓ You have the latest version.';
+      }
+    }, function () {
+      if (byHand) $('updateStatus').textContent = 'Couldn’t check for updates. Please check your internet connection and try again.';
+    }).then(function () {
+      checking = false;
+      $('checkUpdates').disabled = false;
+    });
+  }
+
+  // Refresh the phone's stored copy, then open the app again from it. Counts are already saved.
+  function updateNow() {
+    if (voiceOn) stopVoice();
+    toast('Updating…');
+    var url = location.pathname;
+    fetch(url, { cache: 'reload' }).catch(function () {}).then(function () {
+      location.replace(url + '?v=' + Date.now());
+    });
+  }
+
+  $('versionLine').textContent = 'Version ' + APP_VERSION;
+  $('checkUpdates').addEventListener('click', function () { checkForUpdates(true); });
+  $('updateStatus').addEventListener('click', function (e) { if (e.target.closest('[data-update]')) updateNow(); });
+  $('updateNow').addEventListener('click', updateNow);
+  $('updateLater').addEventListener('click', function () { updateLater = true; $('updateBar').hidden = true; });
+  setTimeout(function () { checkForUpdates(false); }, 4000);
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && Date.now() - lastCheck > 3600000) checkForUpdates(false);
+  });
+
   // ---------- Start ----------
   rollover();
   applyTheme();
   renderBackup();
   render();
   if (migrated) toast('Your earlier counts were loaded ✓');
+  // Just updated: tidy the address and say so
+  if (/[?&]v=\d+/.test(location.search)) {
+    try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) {}
+    toast('Updated to the latest version ✓');
+  }
 
   // While the app is open, start new rounds at prayer times and at midnight
   function checkRounds() {
